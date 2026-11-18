@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="auto">
+
+<head>
+  <%- header %>
+</head>
+
+<body id="app" v-cloak>
+  <Navbar></Navbar>
+  <div id="content" class="container">
+    <h1 class="my-4 text-center">{{ $t('pin.pin_pairing') }}</h1>
+    <form class="form d-flex flex-column align-items-center" id="form" @submit.prevent="registerDevice">
+      <div class="card flex-column d-flex p-4 mb-4">
+        <div class="input-group mt-2">
+          <span class="input-group-text">
+            <hash :size="18" class="icon"></hash>
+          </span>
+          <input type="text" pattern="\d*" :placeholder="`${$t('navbar.pin')}`" autofocus id="pin-input" class="form-control" required />
+        </div>
+        <div class="input-group my-4">
+          <span class="input-group-text">
+            <monitor :size="18" class="icon"></monitor>
+          </span>
+          <input type="text" :placeholder="`${$t('pin.device_name')}`" id="name-input" class="form-control" required />
+        </div>
+
+        <!--
+          SECURITY (S3 pairing-DoS/hijack fix, hardened -- see src/nvhttp.h/.cpp's pin() doc
+          comment): the host now refuses to apply a PIN without an explicit, owner-confirmed
+          target_uniqueid, even when only one pending session is eligible -- a lone eligible
+          session is NOT guaranteed to be the owner's own device (see nvhttp.h's pin() doc
+          comment for the residual hijack this closes: an in-window LAN attacker can be the sole
+          eligible session if the owner's genuine client fired getservercert too long before this
+          page arms the window). This list is fetched from GET /api/pending-pairings
+          (nvhttp::list_pending_pair_sessions(), already filtered to ELIGIBLE sessions only) and
+          requires the owner to pick a row -- identified ONLY by its unspoofable source IP, never
+          by any client-claimed name (a name is attacker-controllable and not present in this
+          payload at all) -- before Send is enabled, even when exactly one row is shown.
+
+          NOTE (scope): the strings in this block are deliberately plain, non-i18n-wired English
+          rather than new $t() keys -- adding keys here would require editing every locale file
+          under src_assets/common/assets/web/public/assets/locale/, which are being actively
+          edited by a concurrent worker in this pass. Wiring these into i18n is a good follow-up,
+          not a security requirement.
+        -->
+        <div class="pending-pairings my-2">
+          <div class="mb-2"><small class="text-muted">{{ pendingHelpText }}</small></div>
+
+          <div v-if="pending.length === 0" class="text-muted small d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span>Waiting for a device to start pairing…</span>
+          </div>
+
+          <div v-else class="list-group">
+            <button
+              v-for="p in pending"
+              :key="p.uniqueid"
+              type="button"
+              class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+              :class="{ active: selectedTarget === p.uniqueid }"
+              @click="selectedTarget = p.uniqueid"
+            >
+              <span class="font-monospace">{{ p.source_ip }}</span>
+              <span class="badge bg-secondary rounded-pill">{{ ageLabel(p.age_sec) }}</span>
+            </button>
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-2" :disabled="!selectedTarget">
+          <forward :size="18" class="icon"></forward>
+          {{ $t('pin.send') }}
+        </button>
+      </div>
+      <div class="alert alert-warning">
+        <b>{{ $t('_common.warning') }}</b> {{ $t('pin.warning_msg') }}
+      </div>
+      <div id="status"></div>
+    </form>
+  </div>
+</body>
+
+<script type="module">
+  import { createApp } from 'vue'
+  import { initApp } from './init'
+  import Navbar from './Navbar.vue'
+  import {
+    Forward,
+    Hash,
+    Monitor,
+  } from 'lucide-vue-next'
+
+  let app = createApp({
+    components: {
+      Navbar,
+      Forward,
+      Hash,
+      Monitor,
+    },
+    inject: ['i18n'],
+    data() {
+      return {
+        // Eligible pending pairing sessions, as returned by GET /api/pending-pairings
+        // (nvhttp::list_pending_pair_sessions()) -- `[{uniqueid, source_ip, age_sec}]`.
+        pending: [],
+        // The uniqueid the owner explicitly tapped -- REQUIRED (non-empty) before Send is
+        // enabled or registerDevice() will act, even when `pending.length === 1`. Never
+        // auto-assigned from `pending` -- see this file's pending-pairings comment above.
+        selectedTarget: '',
+        pendingPollHandle: null,
+      };
+    },
+    computed: {
+      pendingHelpText() {
+        return this.pending.length === 0
+          ? 'Start pairing on your device — its network address will appear here for you to confirm.'
+          : 'Tap the row for your device, identified by its network address. This confirmation is required even if only one device is shown.';
+      },
+    },
+    methods: {
+      ageLabel(ageSec) {
+        return ageSec < 60 ? `${ageSec}s ago` : `${Math.floor(ageSec / 60)}m ago`;
+      },
+      refreshPending() {
+        fetch('./api/pending-pairings')
+          .then((response) => response.json())
+          .then((response) => {
+            this.pending = (response && response.pending) || [];
+            // Clear a selection that vanished (paired by someone else, expired, or evicted)
+            // rather than silently submitting a dead target.
+            if (this.selectedTarget && !this.pending.some((p) => p.uniqueid === this.selectedTarget)) {
+              this.selectedTarget = '';
+            }
+          })
+          .catch(() => {
+            // Authenticated-localhost endpoint; a transient failure just leaves the list as-is
+            // and tries again on the next poll tick -- no need to surface this as a page error.
+          });
+      },
+      registerDevice(e) {
+        // SECURITY: mirrors nvhttp::pin()'s own mandatory-target backstop -- never issue the
+        // request with an empty/implicit target, even defensively (the host would refuse it
+        // anyway, but this avoids sending a PIN over the wire for a request that cannot
+        // succeed, and keeps the UI's own invariant explicit rather than relying solely on the
+        // host to catch it).
+        if (!this.selectedTarget) {
+          return;
+        }
+        let pin = document.querySelector("#pin-input").value;
+        let name = document.querySelector("#name-input").value;
+        document.querySelector("#status").innerHTML = "";
+        let b = JSON.stringify({pin: pin, name: name, uniqueid: this.selectedTarget});
+        fetch("./api/pin", {
+          method: "POST",
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: b
+        })
+          .then((response) => response.json())
+          .then((response) => {
+            if (response.status === true) {
+              document.querySelector(
+                "#status"
+              ).innerHTML = `<div class="alert alert-success" role="alert">${this.i18n.t('pin.pair_success')}</div>`;
+              document.querySelector("#pin-input").value = "";
+              document.querySelector("#name-input").value = "";
+              this.selectedTarget = '';
+            } else {
+              document.querySelector(
+                "#status"
+              ).innerHTML = `<div class="alert alert-danger" role="alert">${this.i18n.t('pin.pair_failure')}</div>`;
+            }
+          });
+      }
+    },
+    mounted() {
+      this.refreshPending();
+      this.pendingPollHandle = setInterval(this.refreshPending, 2000);
+    },
+    beforeUnmount() {
+      if (this.pendingPollHandle) {
+        clearInterval(this.pendingPollHandle);
+      }
+    },
+  });
+
+  initApp(app);
+</script>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Linked into the host daemon as its embedded __info_plist (cmake/targets/macos.cmake).
+       macOS names daemon-triggered permission prompts (local network, firewall) from THIS
+       identifier when no better display name resolves — the upstream dev.lizardbyte.sunshine
+       value surfaced verbatim in an owner-facing prompt (2026-08-14). Kept identical to the
+       codesign identifier (-i io.github.joaodriessen.skylight.host, scripts/package-release.sh)
+       so the binary carries ONE identity everywhere. -->
+  <key>CFBundleIdentifier</key>
+  <string>io.github.joaodriessen.skylight.host</string>
+	<key>CFBundleName</key>
+	<string>Moonwalk Host</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Moonwalk Host streams your screen to Moonwalk and Moonlight clients you pair on your local network.</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>This app requires access to your microphone to stream audio.</string>
+</dict>
+</plist>

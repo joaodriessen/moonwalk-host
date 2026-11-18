@@ -1,0 +1,79 @@
+#include <array>
+#include <chrono>
+#include <functional>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <set>
+#include <unordered_map>
+#include <vector>
+#include <src/utility.h>
+extern "C" {
+#include <third-party/moonlight-common-c/src/Input.h>
+#include <third-party/moonlight-common-c/src/Limelight.h>
+}
+using namespace std::chrono_literals;
+struct emission { uint16_t code; bool release; uint8_t flags; };
+std::vector<emission> emitted;
+namespace platf {
+ void keyboard_update(int &,uint16_t code,bool release,uint8_t flags) { emitted.push_back({code,release,flags}); }
+ void button_mouse(int &,int,bool) { throw std::runtime_error("unexpected mouse emission"); }
+}
+namespace config { struct input_config {
+ std::unordered_map<short,short> keybindings;
+ bool keyboard=true,key_rightalt_to_key_win=false;
+ std::chrono::milliseconds key_repeat_delay{0},key_repeat_period{20};
+} input; }
+struct inert_task_pool {
+ std::vector<std::function<void()>> queued;
+ bool cancel(void *) { return true; }
+ template<class F>void push(F &&f) { queued.emplace_back(std::forward<F>(f)); }
+ template<class F,class D,class...A>auto pushDelayed(F,D,A...) { struct token {void *task_id=nullptr;};return token{}; }
+ void drain() { auto work=std::move(queued);for(auto &f:work)f(); }
+} task_pool;
+int platf_input=0;
+void *key_press_repeat_id=nullptr;
+using key_press_id_t=uint32_t;
+std::unordered_map<key_press_id_t,bool> key_press;
+std::array<uint8_t,5> mouse_press{};
+struct input_t {
+ enum {CTRL=1,ALT=2,SHIFT=4,SHORTCUT=7};
+ int shortcutFlags=0;bool left_alt_pressed=false,right_alt_pressed=false;
+ void *mouse_left_button_timeout=nullptr;
+};
+int apply_shortcut(short) { return 0; } // Host UI shortcuts are outside these release cases.
+/* Actual selected production constants/functions follow. */
+@PRODUCTION@
+
+void packet(std::shared_ptr<input_t> &input,uint16_t code,bool release,uint8_t flags) {
+ NV_KEYBOARD_PACKET p{};p.header.magic=util::endian::little(release?KEY_UP_EVENT_MAGIC:KEY_DOWN_EVENT_MAGIC);
+ p.keyCode=code;p.flags=static_cast<char>(flags);passthrough(input,&p);
+}
+bool balanced() {
+ std::set<std::pair<uint16_t,uint8_t>> held;
+ for(auto e:emitted) {auto key=std::make_pair(e.code,e.flags);if(e.release)held.erase(key);else held.insert(key);}
+ return held.empty();
+}
+int main() {
+ int failures=0,cases=0;
+ auto check=[&](bool pass,const char *name){++cases;if(!pass){++failures;std::cerr<<"FAIL "<<name<<'\n';}};
+ auto clear=[] {emitted.clear();key_press.clear();task_pool.queued.clear();config::input.keybindings.clear();config::input.key_rightalt_to_key_win=false;};
+ auto input=std::make_shared<input_t>();
+ // Real keyboard packet bookkeeping, sender, duplicate-down filtering and reset.
+ clear();config::input.keybindings[0xA5]=0x5B;config::input.key_rightalt_to_key_win=true;
+ packet(input,0xA5,false,0x81);packet(input,0xA5,false,0x81);
+ check(emitted.size()==1 && emitted[0].code==0x5B && emitted[0].flags==0x81,"mapped down/duplicate filtering/high flags");
+ reset(input);task_pool.drain();
+ check(emitted.size()==2 && emitted.back().code==0x5B && emitted.back().release && emitted.back().flags==0x81 && balanced(),"mapped disconnect release");
+ clear();input=std::make_shared<input_t>();config::input.keybindings[0xA5]=0x5B;
+ packet(input,0xA5,false,0x80);repeat_key(0xA5,0x80,0);packet(input,0xA5,true,0x80);
+ check(emitted.size()==3 && emitted[0].code==0x5B && emitted[1].code==0x5B && emitted[2].code==0x5B && balanced(),"normal mapped up and repeated down");
+ clear();input=std::make_shared<input_t>();
+ packet(input,0xA2,false,0x80);packet(input,0xA0,false,0);packet(input,0x41,false,0x22);
+ reset(input);task_pool.drain();
+ check(emitted.size()==6 && balanced(),"unmapped held chord disconnect preserves flags");
+ clear();input=std::make_shared<input_t>();config::input.keybindings[0x41]=0x42;
+ packet(input,0x41,false,0x24);packet(input,0x41,true,0x24);reset(input);task_pool.drain();
+ check(emitted.size()==2 && emitted[0].code==0x42 && emitted[1].code==0x42 && balanced(),"normal up is not released twice by reset");
+ std::cout<<"cases="<<cases<<" failures="<<failures<<'\n';return failures?1:0;
+}

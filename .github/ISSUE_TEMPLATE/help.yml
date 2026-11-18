@@ -1,0 +1,29 @@
+name: Installation or help
+description: Get help with setup or streaming.
+labels: [help wanted]
+body:
+  - type: markdown
+    attributes:
+      value: "Remove private details before sharing. For suspected vulnerabilities, follow [Security](https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md)."
+  - type: input
+    id: version
+    attributes: {label: Moonwalk Host version}
+  - type: dropdown
+    id: step
+    attributes:
+      label: Where are you stuck?
+      options: [Install, First-run setup, Permissions, Pairing, Streaming, Update or removal]
+    validations: {required: true}
+  - type: input
+    id: mac
+    attributes: {label: Mac and macOS version, placeholder: "Mac mini M2, macOS 15.6"}
+    validations: {required: true}
+  - type: textarea
+    id: happened
+    attributes:
+      label: "What happened?"
+      description: Include the exact message and what you already tried.
+    validations: {required: true}
+  - type: textarea
+    id: diagnostics
+    attributes: {label: Diagnostics, description: Review the saved ZIP and remove private details before attaching it.}

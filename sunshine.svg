@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- A flat drawing of macos-dist/AppIcon.icon, for places that need a plain vector. -->
+  <defs>
+    <linearGradient id="leather" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A3A7F2"/><stop offset="1" stop-color="#6E73D2"/></linearGradient>
+    <mask id="mark" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024"><rect width="1024" height="1024" fill="#000"/><g transform="translate(512 512) scale(1.000) translate(-491.0 -492.0)"><path d="M348,190 L832,190 Q880,190 880,238 L880,522 Q880,570 832,570 L348,570 Q300,570 300,522 L300,238 Q300,190 348,190 Z M590.0,570 L590.0,658 M460.0,658 L720.0,658" fill="none" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" /><path d="M184,440 L556,440 Q590,440 590,474 L590,692 Q590,726 556,726 L184,726 Q150,726 150,692 L150,474 Q150,440 184,440 Z" fill="#000" stroke="#000" stroke-width="134.4" stroke-linejoin="round"/><path d="M104,796.0 L636,796.0" fill="none" stroke="#000" stroke-width="134.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M184,440 L556,440 Q590,440 590,474 L590,692 Q590,726 556,726 L184,726 Q150,726 150,692 L150,474 Q150,440 184,440 Z" fill="none" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" /><path d="M104,796.0 L636,796.0" fill="none" stroke="#fff" stroke-width="56" stroke-linecap="round" stroke-linejoin="round" /></g></mask>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#leather)"/>
+  <g transform="translate(100 100) scale(.8047)"><rect width="1024" height="1024" fill="#3A3E96" fill-opacity=".6" mask="url(#mark)"/></g>
+</svg>

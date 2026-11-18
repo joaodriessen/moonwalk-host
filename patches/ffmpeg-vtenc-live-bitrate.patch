@@ -1,0 +1,81 @@
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -301,6 +301,8 @@
+     int max_ref_frames;
+     int spatialaq;
+     int sync_output;
++    int64_t live_bitrate;
++    int64_t applied_live_bitrate;
+     int sync_deadline_us;
+     AVFrame *input_frame;
+ } VTEncContext;
+@@ -2616,6 +2618,53 @@
+     return 0;
+ }
+ 
++/*
++ * Follow live_bitrate on the running session. VideoToolbox applies both properties
++ * to frames submitted from here on, with no new session and no keyframe. A rate
++ * the session refuses is left for the next change rather than failing the frame.
++ */
++static void vtenc_apply_live_bitrate(AVCodecContext *avctx, VTEncContext *vtctx)
++{
++    SInt32 bit_rate;
++    int64_t bytes_per_second, one_second = 1;
++    CFNumberRef bit_rate_num, bytes_num, second_num;
++    OSStatus status;
++
++    if (!vtctx->live_bitrate || vtctx->live_bitrate == vtctx->applied_live_bitrate)
++        return;
++    vtctx->applied_live_bitrate = vtctx->live_bitrate;
++
++    bit_rate = (SInt32)FFMIN(vtctx->live_bitrate, INT32_MAX);
++    bit_rate_num = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &bit_rate);
++    if (!bit_rate_num)
++        return;
++    status = VTSessionSetProperty(vtctx->session,
++                                  vtctx->constant_bit_rate ? compat_keys.kVTCompressionPropertyKey_ConstantBitRate
++                                                           : kVTCompressionPropertyKey_AverageBitRate,
++                                  bit_rate_num);
++    CFRelease(bit_rate_num);
++    if (status)
++        av_log(avctx, AV_LOG_WARNING, "Error changing bitrate: %d\n", (int)status);
++
++    bytes_per_second = vtctx->live_bitrate >> 3;
++    bytes_num = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &bytes_per_second);
++    second_num = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &one_second);
++    if (bytes_num && second_num) {
++        const void *nums[2] = { bytes_num, second_num };
++        CFArrayRef limits = CFArrayCreate(kCFAllocatorDefault, nums, 2, &kCFTypeArrayCallBacks);
++        if (limits) {
++            status = VTSessionSetProperty(vtctx->session, kVTCompressionPropertyKey_DataRateLimits, limits);
++            if (status)
++                av_log(avctx, AV_LOG_DEBUG, "Error changing max bitrate: %d\n", (int)status);
++            CFRelease(limits);
++        }
++    }
++    if (bytes_num)
++        CFRelease(bytes_num);
++    if (second_num)
++        CFRelease(second_num);
++}
++
+ static int vtenc_send_frame(AVCodecContext *avctx,
+                             VTEncContext   *vtctx,
+                             const AVFrame  *frame)
+@@ -2649,6 +2698,7 @@
+ #endif
+ 
+     time = CMTimeMake(frame->pts * avctx->time_base.num, avctx->time_base.den);
++    vtenc_apply_live_bitrate(avctx, vtctx);
+     status = VTCompressionSessionEncodeFrame(
+         vtctx->session,
+         cv_img,
+@@ -2942,6 +2992,7 @@
+     { "max_ref_frames", \
+         "Sets the maximum number of reference frames. This only has an effect when the value is less than the maximum allowed by the profile/level.", \
+         OFFSET(max_ref_frames), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE }, \
++    { "live_bitrate", "Change the target bitrate of a running session", OFFSET(live_bitrate), AV_OPT_TYPE_INT64, { .i64 = 0 }, 0, INT64_MAX, VE }, \
+     { "sync_output", \
+         "Block each encode call until VideoToolbox's asynchronous callback delivers that call's own packet, instead of only collecting it on a later call. Eliminates the encoder's structural 1-3 frame output-collection delay at the cost of the encode call blocking for roughly one frame's encode latency.", \
+         OFFSET(sync_output), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE }, \

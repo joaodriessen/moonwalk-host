@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Guides
+    url: https://github.com/joaodriessen/moonwalk-host/blob/main/docs/guides/README.md
+    about: Installing, settings and troubleshooting.
+  - name: Security reporting
+    url: https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md
+    about: Read the private reporting instructions; do not post vulnerability details in a public issue.

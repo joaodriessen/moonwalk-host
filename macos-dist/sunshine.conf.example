@@ -1,0 +1,94 @@
+# Skylight / Sunshine configuration — shipped defaults for local-network streaming.
+# See https://github.com/joaodriessen/moonwalk-host for documentation.
+
+# ── Audio ─────────────────────────────────────────────────────────────────────
+# Native macOS system audio via ScreenCaptureKit. No BlackHole/Soundflower needed.
+audio_sink = system
+
+# ── Encoder / codec ───────────────────────────────────────────────────────────
+# Hardware H.264 via VideoToolbox: frees CPU compared to the software encoder and
+# enables a zero-copy capture-to-encode path. Loss recovery uses on-demand IDR
+# (the client requests a keyframe on packet loss and VideoToolbox answers
+# immediately), rather than a periodic fixed-interval keyframe, which avoids
+# both stream-garbling stalls and the stutter a fixed keyframe cadence causes.
+# Fallback: set 'software' if a client shows decode artifacts (x264 settings
+# below apply only to that fallback).
+encoder = videotoolbox
+sw_preset = ultrafast
+sw_tune = zerolatency
+# Parallelizes the software (x264) encoder fallback across CPU performance cores.
+# The library default of 2 threads is too few for high-resolution software
+# encoding and drops frames under motion. 8 suits Apple Silicon Macs with 8+
+# performance cores; lower this if it competes with other heavy local work.
+min_threads = 8
+# Frame-pacing: the encode loop waits 1000/minimum_fps_target ms for each captured frame.
+# Left at the default (= framerate, 60) that wait is 16.67ms — identical to the 60fps frame
+# interval, so capture delivery and the encode timeout beat against each other → a regular
+# pulsing jitter. 30 makes the wait 33ms (comfortable margin), decoupling them. Motion still
+# streams at full 60fps; this only sets the static-content keepalive floor.
+minimum_fps_target = 30
+
+# Detailed one-line-per-second pipeline metrics are for temporary investigations only. Keeping
+# them disabled in normal operation avoids needless disk writes; the installed launchd logs are
+# independently bounded at 8 MiB with three retained generations.
+perf_trace = disabled
+
+# H.264-only (mode 1): the conservative, most broadly compatible codec choice —
+# every Moonlight client decodes H.264, not every client decodes HEVC/AV1. If
+# your client supports HEVC/AV1, raising this mode can improve bandwidth
+# efficiency at the same quality; this shipped default favors compatibility
+# over that gain. Loss recovery is on-demand IDR (see the encoder comment above).
+hevc_mode = 1
+
+# ── Bitrate ───────────────────────────────────────────────────────────────────
+# Ceiling only — the actual bitrate is chosen in the Moonlight client. 80 Mbps
+# gives headroom for crisp desktop text at high resolution over a local network;
+# lower it if your network can't sustain that. H.264 (the shipped codec default
+# above) needs more bitrate than HEVC for comparable sharpness.
+max_bitrate = 80000
+
+# ── Display capture ───────────────────────────────────────────────────────────
+# enabled = on connect, create a headless virtual display sized to whatever
+# resolution/aspect ratio the connecting Moonlight client requests, rather than
+# streaming the physical display's fixed shape. This matters whenever the
+# client's aspect ratio doesn't match the physical display's. Hardware
+# (VideoToolbox) encoding makes high native resolutions affordable to stream;
+# that headroom is smaller with the software encoder fallback. Apps stay on the
+# physical monitor unless moved onto the virtual display (or it's set primary
+# in System Settings > Displays).
+virtual_display = enabled
+
+# ── Network ───────────────────────────────────────────────────────────────────
+# Local network only → no UPnP port mapping. This removes the repeated
+# "Failed to map TCP/UDP ... 501" errors and makes the stream start faster.
+# Set to 'enabled' only if you later want to stream from outside your home.
+upnp = disabled
+
+# ── Auto display arrangement ──────────────────────────────────────────────────
+# On connect: mirror a physical display onto the virtual display at HiDPI @2x
+# (native-feel UI, Retina-crisp) and make the VD primary. On disconnect: restore.
+# Script: arrange_displays.sh (log: /tmp/sunshine_display.log). arrange_displays.sh
+# discovers physical displays dynamically at runtime (no hardcoded monitor UUID, no
+# per-machine configuration needed — see the script's own header for how).
+# NOT enabled by default below: global_prep_cmd is commented out — opt in by
+# uncommenting it. Example only (uncomment and adjust the path to your checkout/$HOME
+# before use; sunshine.conf itself does not expand $HOME -- substitute your actual
+# home dir):
+# global_prep_cmd = [{"do":"$HOME/.local/share/lumen/arrange_displays.sh start","undo":"$HOME/.local/share/lumen/arrange_displays.sh stop"}]
+
+# ── Quit app on disconnect (Skylight local patch) ─────────────────────────────
+# Retain the lightweight Desktop target so a temporary interruption can resume.
+# Capture and the virtual display are still released when the last stream stops;
+# the existing resume route prepares the display again. Explicit session End still
+# quits the target. Enable this option to require a fresh launch after disconnect.
+# Existing saved choices are preserved when upgrading.
+quit_app_on_disconnect = disabled
+
+# ── System tray ────────────────────────────────────────────────────────────────
+# The tray MUST stay enabled on macOS: main.cpp gates the main-thread event loop
+# on it (run_loop = tray_is_enabled && system_tray), and without that loop
+# ScreenCaptureKit/virtual-display capture is dead — clients cannot stream.
+# Learned live 2026-07-14 (system_tray=false broke all connections). The tray is
+# branded "Skylight" now. Do not disable without first making the event loop
+# unconditional in main.cpp.
+system_tray = true

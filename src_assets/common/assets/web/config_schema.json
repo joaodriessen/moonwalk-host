@@ -1,0 +1,983 @@
+{
+  "version": 1,
+  "generated_note": "Authored by hand from src/config.cpp apply_config() (parser truth) cross-referenced with config.html tabs[].options and the 10 .vue files' hardcoded <option> enums (UI truth), per docs/design/config-schema-ssot.md stage 1. Not codegen -- see tests/integration/test_config_consistency.cpp for the parity gate that keeps this file honest.",
+  "options": [
+    {
+      "name": "av1_mode",
+      "type": "int",
+      "default": 0,
+      "tab": "advanced",
+      "constraints": {
+        "min": 0,
+        "max": 3
+      }
+    },
+    {
+      "name": "capture",
+      "type": "string",
+      "default": "",
+      "tab": "advanced"
+    },
+    {
+      "name": "encoder",
+      "type": "string",
+      "default": "",
+      "tab": "advanced"
+    },
+    {
+      "name": "fec_percentage",
+      "type": "int",
+      "default": 20,
+      "tab": "advanced",
+      "constraints": {
+        "min": 1,
+        "max": 255
+      }
+    },
+    {
+      "name": "hevc_mode",
+      "type": "int",
+      "default": 0,
+      "tab": "advanced",
+      "constraints": {
+        "min": 0,
+        "max": 3
+      }
+    },
+    {
+      "name": "min_threads",
+      "type": "int",
+      "default": 2,
+      "tab": "advanced"
+    },
+    {
+      "name": "qp",
+      "type": "int",
+      "default": 28,
+      "tab": "advanced"
+    },
+    {
+      "name": "virtual_display",
+      "type": "string",
+      "default": "enabled",
+      "tab": "advanced"
+    },
+    {
+      "name": "amd_coder",
+      "type": "enum",
+      "default": "auto",
+      "tab": "amd",
+      "constraints": {
+        "enum": [
+          "auto",
+          "cabac",
+          "cavlc"
+        ]
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_enforce_hrd",
+      "type": "bool",
+      "default": false,
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_preanalysis",
+      "type": "bool",
+      "default": false,
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_quality",
+      "type": "string",
+      "default": "balanced",
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_rc",
+      "type": "string",
+      "default": "vbr_latency",
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_usage",
+      "type": "string",
+      "default": "ultralowlatency",
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "amd_vbaq",
+      "type": "bool",
+      "default": true,
+      "tab": "amd",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "adapter_name",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "audio_sink",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "dd_config_revert_delay",
+      "type": "int",
+      "default": 3000,
+      "tab": "av",
+      "constraints": {
+        "min": 0,
+        "max": null
+      }
+    },
+    {
+      "name": "dd_config_revert_on_disconnect",
+      "type": "bool",
+      "default": false,
+      "tab": "av"
+    },
+    {
+      "name": "dd_configuration_option",
+      "type": "enum",
+      "default": "disabled",
+      "tab": "av",
+      "constraints": {
+        "enum": [
+          "disabled",
+          "verify_only",
+          "ensure_active",
+          "ensure_primary",
+          "ensure_only_display"
+        ]
+      }
+    },
+    {
+      "name": "dd_hdr_option",
+      "type": "enum",
+      "default": "auto",
+      "tab": "av",
+      "constraints": {
+        "enum": [
+          "disabled",
+          "auto"
+        ]
+      }
+    },
+    {
+      "name": "dd_manual_refresh_rate",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "dd_manual_resolution",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "dd_mode_remapping",
+      "type": "object",
+      "default": {
+        "mixed": [],
+        "resolution_only": [],
+        "refresh_rate_only": []
+      },
+      "tab": "av"
+    },
+    {
+      "name": "dd_refresh_rate_option",
+      "type": "enum",
+      "default": "auto",
+      "tab": "av",
+      "constraints": {
+        "enum": [
+          "disabled",
+          "auto",
+          "manual"
+        ]
+      }
+    },
+    {
+      "name": "dd_resolution_option",
+      "type": "enum",
+      "default": "auto",
+      "tab": "av",
+      "constraints": {
+        "enum": [
+          "disabled",
+          "auto",
+          "manual"
+        ]
+      }
+    },
+    {
+      "name": "dd_wa_hdr_toggle_delay",
+      "type": "int",
+      "default": 0,
+      "tab": "av",
+      "constraints": {
+        "min": 0,
+        "max": 3000
+      }
+    },
+    {
+      "name": "install_steam_audio_drivers",
+      "type": "bool",
+      "default": true,
+      "tab": "av"
+    },
+    {
+      "name": "max_bitrate",
+      "type": "int",
+      "default": 0,
+      "tab": "av"
+    },
+    {
+      "name": "minimum_fps_target",
+      "type": "double",
+      "default": 0,
+      "tab": "av",
+      "constraints": {
+        "min": 0.0,
+        "max": 1000.0
+      }
+    },
+    {
+      "name": "output_name",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "perf_trace",
+      "type": "bool",
+      "default": false,
+      "tab": "av"
+    },
+    {
+      "name": "steady_frame_delivery",
+      "type": "bool",
+      "default": true,
+      "tab": "av"
+    },
+    {
+      "name": "frame_departure_mode",
+      "type": "int",
+      "default": 1,
+      "tab": "av",
+      "constraints": {
+        "min": 0,
+        "max": 2
+      }
+    },
+    {
+      "name": "departure_guard_ms",
+      "type": "double",
+      "default": 2.5,
+      "tab": "av",
+      "constraints": {
+        "min": 0,
+        "max": 8
+      }
+    },
+    {
+      "name": "smooth_pacing",
+      "type": "bool",
+      "default": false,
+      "tab": "av"
+    },
+    {
+      "name": "capture_cursor",
+      "type": "bool",
+      "default": true,
+      "tab": "av"
+    },
+    {
+      "name": "stream_audio",
+      "type": "bool",
+      "default": true,
+      "tab": "av"
+    },
+    {
+      "name": "virtual_sink",
+      "type": "string",
+      "default": "",
+      "tab": "av"
+    },
+    {
+      "name": "cert",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "credentials_file",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "file_apps",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "file_state",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "log_path",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "pkey",
+      "type": "path",
+      "default": "",
+      "tab": "files"
+    },
+    {
+      "name": "global_prep_cmd",
+      "type": "list",
+      "default": [],
+      "tab": "general"
+    },
+    {
+      "name": "locale",
+      "type": "enum",
+      "default": "en",
+      "tab": "general",
+      "constraints": {
+        "enum": [
+          "bg",
+          "cs",
+          "de",
+          "en",
+          "en_GB",
+          "en_US",
+          "es",
+          "fr",
+          "hu",
+          "it",
+          "ja",
+          "ko",
+          "pl",
+          "pt",
+          "pt_BR",
+          "ru",
+          "sv",
+          "tr",
+          "uk",
+          "vi",
+          "zh",
+          "zh_TW"
+        ]
+      }
+    },
+    {
+      "name": "min_log_level",
+      "type": "string",
+      "default": "2",
+      "tab": "general",
+      "constraints": {
+        "enum": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6"
+        ]
+      }
+    },
+    {
+      "name": "notify_pre_releases",
+      "type": "bool",
+      "default": false,
+      "tab": "general"
+    },
+    {
+      "name": "quit_app_on_disconnect",
+      "type": "bool",
+      "default": false,
+      "tab": "general"
+    },
+    {
+      "name": "sunshine_name",
+      "type": "string",
+      "default": "",
+      "tab": "general"
+    },
+    {
+      "name": "system_tray",
+      "type": "bool",
+      "default": true,
+      "tab": "general"
+    },
+    {
+      "name": "clipboard_sync",
+      "type": "bool",
+      "default": true,
+      "tab": "general"
+    },
+    {
+      "name": "always_send_scancodes",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "back_button_timeout",
+      "type": "int",
+      "default": -1,
+      "tab": "input"
+    },
+    {
+      "name": "controller",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "ds4_back_as_touchpad_click",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "gamepad",
+      "type": "enum",
+      "default": "auto",
+      "tab": "input"
+    },
+    {
+      "name": "high_resolution_scrolling",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "key_repeat_delay",
+      "type": "int",
+      "default": 500,
+      "tab": "input"
+    },
+    {
+      "name": "key_repeat_frequency",
+      "type": "double",
+      "default": 24.9,
+      "tab": "input",
+      "constraints": {
+        "min": 0,
+        "max": null
+      }
+    },
+    {
+      "name": "key_rightalt_to_key_win",
+      "type": "bool",
+      "default": false,
+      "tab": "input"
+    },
+    {
+      "name": "keybindings",
+      "type": "map",
+      "default": "[0x10,0xA0,0x11,0xA2,0x12,0xA4]",
+      "tab": "input"
+    },
+    {
+      "name": "keyboard",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "motion_as_ds4",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "mouse",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "native_pen_touch",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "touchpad_as_ds4",
+      "type": "bool",
+      "default": true,
+      "tab": "input"
+    },
+    {
+      "name": "address_family",
+      "type": "enum",
+      "default": "ipv4",
+      "tab": "network",
+      "constraints": {
+        "enum": [
+          "ipv4",
+          "both"
+        ]
+      }
+    },
+    {
+      "name": "bind_address",
+      "type": "string",
+      "default": "",
+      "tab": "network"
+    },
+    {
+      "name": "external_ip",
+      "type": "string",
+      "default": "",
+      "tab": "network"
+    },
+    {
+      "name": "lan_encryption_mode",
+      "type": "int",
+      "default": 0,
+      "tab": "network",
+      "constraints": {
+        "min": 0,
+        "max": 2
+      }
+    },
+    {
+      "name": "origin_web_ui_allowed",
+      "type": "enum",
+      "default": "lan",
+      "tab": "network",
+      "constraints": {
+        "enum": [
+          "pc",
+          "lan",
+          "wan"
+        ]
+      }
+    },
+    {
+      "name": "pair_origin_allowed",
+      "type": "enum",
+      "default": "lan",
+      "tab": "network",
+      "constraints": {
+        "enum": [
+          "pc",
+          "lan",
+          "wan"
+        ]
+      }
+    },
+    {
+      "name": "ping_timeout",
+      "type": "int",
+      "default": 10000,
+      "tab": "network",
+      "constraints": {
+        "min": -1,
+        "max": null
+      }
+    },
+    {
+      "name": "port",
+      "type": "int",
+      "default": 47989,
+      "tab": "network",
+      "constraints": {
+        "min": 1019,
+        "max": 65514
+      }
+    },
+    {
+      "name": "upnp",
+      "type": "bool",
+      "default": false,
+      "tab": "network"
+    },
+    {
+      "name": "wan_encryption_mode",
+      "type": "int",
+      "default": 1,
+      "tab": "network",
+      "constraints": {
+        "min": 0,
+        "max": 2
+      }
+    },
+    {
+      "name": "web_ui_enabled",
+      "type": "bool",
+      "default": false,
+      "tab": "network"
+    },
+    {
+      "name": "nvenc_h264_cavlc",
+      "type": "bool",
+      "default": false,
+      "tab": "nv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_latency_over_power",
+      "type": "bool",
+      "default": true,
+      "tab": "nv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_opengl_vulkan_on_dxgi",
+      "type": "bool",
+      "default": true,
+      "tab": "nv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_preset",
+      "type": "int",
+      "default": 1,
+      "tab": "nv",
+      "constraints": {
+        "min": 1,
+        "max": 7
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_realtime_hags",
+      "type": "bool",
+      "default": true,
+      "tab": "nv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_spatial_aq",
+      "type": "bool",
+      "default": false,
+      "tab": "nv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_twopass",
+      "type": "enum",
+      "default": "quarter_res",
+      "tab": "nv",
+      "constraints": {
+        "enum": [
+          "disabled",
+          "quarter_res",
+          "full_res"
+        ]
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "nvenc_vbv_increase",
+      "type": "int",
+      "default": 0,
+      "tab": "nv",
+      "constraints": {
+        "min": 0,
+        "max": 400
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "qsv_coder",
+      "type": "enum",
+      "default": "auto",
+      "tab": "qsv",
+      "constraints": {
+        "enum": [
+          "auto",
+          "cabac",
+          "cavlc"
+        ]
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "qsv_preset",
+      "type": "enum",
+      "default": "medium",
+      "tab": "qsv",
+      "constraints": {
+        "enum": [
+          "veryfast",
+          "faster",
+          "fast",
+          "medium",
+          "slow",
+          "slower",
+          "slowest"
+        ]
+      },
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "qsv_slow_hevc",
+      "type": "bool",
+      "default": false,
+      "tab": "qsv",
+      "platform": [
+        "windows",
+        "linux"
+      ]
+    },
+    {
+      "name": "sw_preset",
+      "type": "string",
+      "default": "superfast",
+      "tab": "sw"
+    },
+    {
+      "name": "sw_tune",
+      "type": "string",
+      "default": "zerolatency",
+      "tab": "sw"
+    },
+    {
+      "name": "vaapi_strict_rc_buffer",
+      "type": "bool",
+      "default": false,
+      "tab": "vaapi",
+      "platform": [
+        "linux"
+      ]
+    },
+    {
+      "name": "vt_cbr",
+      "type": "int",
+      "default": 0,
+      "tab": "vt",
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_sync_output",
+      "type": "int",
+      "default": 1,
+      "tab": "vt",
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_sync_deadline_us",
+      "type": "int",
+      "default": 14000,
+      "tab": "vt",
+      "constraints": {
+        "min": 0,
+        "max": 100000
+      },
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_reinit_cure",
+      "type": "bool",
+      "default": false,
+      "tab": "vt",
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_coder",
+      "type": "enum",
+      "default": "auto",
+      "tab": "vt",
+      "constraints": {
+        "enum": [
+          "auto",
+          "cabac",
+          "cavlc"
+        ]
+      },
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_low_delay",
+      "type": "bool",
+      "default": false,
+      "tab": "vt",
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_realtime",
+      "type": "enum",
+      "default": "enabled",
+      "tab": "vt",
+      "constraints": {
+        "enum": [
+          "enabled",
+          "disabled"
+        ]
+      },
+      "platform": [
+        "macos"
+      ]
+    },
+    {
+      "name": "vt_software",
+      "type": "enum",
+      "default": "auto",
+      "tab": "vt",
+      "constraints": {
+        "enum": [
+          "auto",
+          "disabled",
+          "allowed",
+          "forced"
+        ]
+      },
+      "platform": [
+        "macos"
+      ]
+    }
+  ],
+  "discrepancies": [
+    {
+      "kind": "missing_from_ui",
+      "options": [
+        "quit_app_on_disconnect",
+        "virtual_display",
+        "clipboard_sync",
+        "web_ui_enabled"
+      ],
+      "detail": "Parsed by config.cpp apply_config() but absent from config.html tabs[].options and every .vue file (zero occurrences anywhere under src_assets/common/assets/web/). Only reachable today by hand-editing sunshine.conf. tab/default assigned here from config.cpp struct initializers (config.cpp:437-587), not from UI. clipboard_sync and web_ui_enabled were added to the schema without a UI control on purpose: web_ui_enabled gates the confighttp listener that serves this very UI (self-disabling via the UI it disables would be a footgun), and clipboard_sync mirrors that config-file-only reach until/unless a control is deliberately added."
+    },
+    {
+      "kind": "hidden_on_macos",
+      "options": [
+        "capture",
+        "gamepad",
+        "qp"
+      ],
+      "detail": "Present in config.html tabs[].options (cross-platform default bag) but the .vue control is unconditionally hidden when platform === 'macos' (Advanced.vue v-if=\"platform !== 'macos'\" for capture and qp; Inputs.vue v-if=\"... && platform !== 'macos'\" for gamepad). On this macOS-only fork these options are parsed and defaulted but never user-editable via the web UI. qp is additionally dead code on this fork: config::video.qp (src/config.h:25, parsed src/config.cpp:1073) is never read by any encoder path, macOS or otherwise -- the UI hide just stops surfacing a control with zero effect."
+    },
+    {
+      "kind": "unconstrained_parser_vs_ui_enum",
+      "options": [
+        "amd_quality",
+        "amd_rc",
+        "amd_usage",
+        "capture",
+        "encoder",
+        "sw_preset",
+        "sw_tune"
+      ],
+      "detail": "Parser uses string_f (accepts any string, no server-side allow-list) while the corresponding .vue renders a <select> with a fixed hardcoded <option> list. saveConfig() (confighttp.cpp:986) writes any value posted for these keys straight to the config file with zero validation -- this is exactly the '// TODO: Input Validation' gap the design doc calls out. Schema records type=string (parser truth) per these entries; UI-observed enum values are NOT encoded in constraints.enum for these because the parser does not enforce them (would be a false enum-parity signal for the gate)."
+    },
+    {
+      "kind": "opaque_converter_enum",
+      "options": [
+        "nvenc_twopass",
+        "dd_configuration_option",
+        "dd_resolution_option",
+        "dd_refresh_rate_option",
+        "dd_hdr_option",
+        "qsv_preset",
+        "qsv_coder",
+        "amd_coder",
+        "vt_coder",
+        "vt_realtime",
+        "vt_software"
+      ],
+      "detail": "Parsed via generic_f(...) or the 4-arg int_f(vars,name,var,converter) form. The allowed string set lives in an external *_from_view() converter (e.g. qsv::preset_from_view, dd::config_option_from_view) defined outside config.cpp/config.h, not in a literal allow-list the parser exposes -- so it is outside the regex-reachable 'parser truth' this test can verify. constraints.enum on these entries is sourced from the matching .vue <option> list (UI truth) as best-effort documentation, and the parity test does NOT assert it against config.cpp for this reason (see kind='opaque_converter_enum' -> type/enum parity skipped, name-only parity enforced)."
+    },
+    {
+      "kind": "dynamic_enum",
+      "options": [
+        "gamepad"
+      ],
+      "detail": "string_restricted_f's allow-list is get_supported_gamepad_options() (config.cpp:1037), populated at runtime from platf::supported_gamepads(nullptr) -- platform/build dependent, not a static literal. No constraints.enum is recorded; schema type is 'enum' per the string_restricted_f helper but the value set cannot be captured statically. Also see 'hidden_on_macos'."
+    },
+    {
+      "kind": "alias_values_not_in_ui_enum",
+      "options": [
+        "min_log_level"
+      ],
+      "detail": "Parser (config.cpp:1285-1310) accepts either a digit '0'-'6' or a word alias (verbose/debug/info/warning/error/fatal/none); General.vue's <select> only ever writes/display the digit form. constraints.enum records the UI-reachable digit strings only; the word aliases are real accepted input but console/API-only."
+    }
+  ]
+}

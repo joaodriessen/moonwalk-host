@@ -1,0 +1,26 @@
+name: Bug report
+description: Tell us what went wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "For suspected security vulnerabilities, follow [Security](https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md). Do not post credentials or vulnerability details in an ordinary issue."
+  - type: input
+    id: version
+    attributes: {label: Moonwalk Host version}
+    validations: {required: true}
+  - type: input
+    id: system
+    attributes: {label: "Mac model, macOS version, and client app/version"}
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes: {label: Steps to reproduce}
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes: {label: "What happened, and what did you expect?"}
+    validations: {required: true}
+  - type: textarea
+    id: diagnostics
+    attributes: {label: Diagnostics or screenshots, description: Review and remove private details before attaching.}

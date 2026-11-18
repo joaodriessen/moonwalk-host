@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  TEMPLATE -- not installed directly. Rendered by install-agent.sh (placeholders __LABEL__,
+  __REPO__) into ~/Library/LaunchAgents: `macos-dist/install-agent.sh ghostwatch`. Runs
+  skylight-ghost-watchdog.sh straight from the repo checkout (no separate copy/symlink step
+  needed) every 5 minutes to detect and cure orphaned virtual displays. See
+  skylight-ghost-watchdog.sh's own header for what it does and why.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>__LABEL__</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO__/macos-dist/skylight-ghost-watchdog.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>300</integer>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StandardErrorPath</key>
+    <string>/tmp/skylight-ghostwatch.err</string>
+</dict>
+</plist>

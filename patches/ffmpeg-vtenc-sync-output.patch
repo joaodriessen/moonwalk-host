@@ -1,0 +1,310 @@
+diff --git a/libavcodec/videotoolboxenc.c b/libavcodec/videotoolboxenc.c
+index cb3571c..5e7ed64 100644
+--- a/libavcodec/videotoolboxenc.c
++++ b/libavcodec/videotoolboxenc.c
+@@ -22,7 +22,9 @@
+ #include <CoreMedia/CoreMedia.h>
+ #include <CoreVideo/CoreVideo.h>
+ #include <dlfcn.h>
++#include <errno.h>
+ #include <pthread.h>
++#include <sys/time.h>
+ #include <TargetConditionals.h>
+ #include <VideoToolbox/VideoToolbox.h>
+ 
+@@ -41,6 +43,53 @@
+ #include "hwconfig.h"
+ #include "internal.h"
+ 
++/*
++ * Max-inflight cap (live-defect fix, 2026-07-14; see the catch-up-drain addendum in
++ * docs/design/2026-07-13-vt-sync-output.md in the Skylight tree for the full investigation,
++ * including why an active-drain approach was tried, tested, and retracted).
++ *
++ * sync_deadline_us bounds how long a single pop may block, but this compat-shim calling
++ * convention (FF_CODEC_ENCODE_CB) pops at most one completed packet per real
++ * avcodec_send_frame() call -- so once a deadline miss lets backlog (submitted-minus-delivered)
++ * grow, it is a structural ratchet: submit-rate == pop-rate == 1/cycle forever, even after VT
++ * recovers, because nothing about wait mode changes pop *frequency*. Left unchecked this grows
++ * without bound under sustained overload (confirmed live: reached 10 frames / ~167ms and never
++ * recovered for the rest of the session).
++ *
++ * IMPORTANT, empirically confirmed (2026-07-14): once backlog exists, NOTHING achievable through
++ * this calling convention can shrink it back to zero short of a real flush (avcodec_send_frame
++ * (NULL), which is not viable mid-session -- it permanently sets avci->draining and refuses all
++ * further frames). A "submit an extra duplicate frame purely to buy another pop" approach was
++ * implemented and tested at the Skylight layer; it produced byte-identical inflight trajectories
++ * to doing nothing, because every successful pop requires its own paired send_frame call, so the
++ * extra pop a burst tick buys is exactly offset by the extra submission that same tick required.
++ * Backlog, once nonzero, is therefore a PERMANENT plateau for the life of the encode session --
++ * the only lever available is bounding how high that plateau can ever get.
++ *
++ * That's what this cap does: once inflight (frame_ct_in - frame_ct_out) reaches
++ * VT_SYNC_MAX_INFLIGHT, vtenc_q_pop() reverts to the pre-deadline unbounded wait for that call
++ * (ignoring whatever deadline_us the caller passed). Because frame_ct_in is incremented for the
++ * frame being submitted THIS call before this check runs, the count here always includes that
++ * frame's own not-yet-delivered packet -- so the cap's effective steady-state plateau, once
++ * backlog has formed, settles at VT_SYNC_MAX_INFLIGHT - 1 pre-existing misses (verified live at
++ * VT_SYNC_MAX_INFLIGHT=3: plateaus at 2, not 3). During genuine sustained overload (q_head
++ * legitimately empty because VT hasn't finished ANY frame in a while) the forced unbounded wait
++ * DOES block for real, providing real backpressure that paces the caller down toward VT's actual
++ * throughput (capture drops frames upstream via its own mailbox instead of this queue growing
++ * further) -- confirmed live via call-latency spikes during the loaded window. Once any residual
++ * backlog exists AND VT is keeping up again, further unbounded waits do not block (q_head is
++ * never empty), so the residual neither grows past the cap nor shrinks below it -- it just sits
++ * at the plateau, bounded, for the rest of the session. Net effect: permanent added latency is
++ * bounded to (VT_SYNC_MAX_INFLIGHT - 1) frame periods (~33ms at 60fps for the value below)
++ * instead of the previously-unbounded growth.
++ *
++ * No new AVOption: this derives entirely from the caller-passed deadline_us being positive
++ * (which itself only happens when sync_output=1 and sync_deadline_us>0 are both active for a
++ * live frame -- see vtenc_frame()), so the cap is automatically inert whenever the deadline
++ * feature itself is inert (deadline_us<=0), matching the "derive, don't add a knob" ask.
++ */
++#define VT_SYNC_MAX_INFLIGHT 3
++
+ #if !HAVE_KCMVIDEOCODECTYPE_HEVC
+ enum { kCMVideoCodecType_HEVC = 'hvc1' };
+ #endif
+@@ -289,6 +338,8 @@ typedef struct VTEncContext {
+     int power_efficient;
+     int max_ref_frames;
+     int spatialaq;
++    int sync_output;
++    int sync_deadline_us;
+ } VTEncContext;
+ 
+ static void vtenc_free_buf_node(BufNode *info)
+@@ -374,6 +425,20 @@ static void set_async_error(VTEncContext *vtctx, int err)
+         info = next;
+     }
+ 
++    /*
++     * sync_output (and any future blocking waiter) may be parked in
++     * vtenc_q_pop()'s pthread_cond_wait() right now with nothing queued.
++     * Setting async_error above is not itself a wakeup: pthread_cond_wait()
++     * only returns on a signal/broadcast (or spurious wake), never merely
++     * because a variable it watches changed underneath it. Without this
++     * broadcast a waiter blocked here would hang forever once an async
++     * error lands. This is a no-op with today's only wait=true caller
++     * (flush, which is always preceded by a synchronous, fully-drained
++     * VTCompressionSessionCompleteFrames call) but is required for
++     * correctness once sync_output can wait on live, in-flight frames.
++     */
++    pthread_cond_broadcast(&vtctx->cv_sample_sent);
++
+     pthread_mutex_unlock(&vtctx->lock);
+ }
+ 
+@@ -410,9 +475,11 @@ static void vtenc_reset(VTEncContext *vtctx)
+     }
+ }
+ 
+-static int vtenc_q_pop(VTEncContext *vtctx, bool wait, CMSampleBufferRef *buf, ExtraSEI *sei)
++static int vtenc_q_pop(VTEncContext *vtctx, bool wait, int64_t deadline_us,
++                       CMSampleBufferRef *buf, ExtraSEI *sei)
+ {
+     BufNode *info;
++    struct timespec deadline_ts;
+ 
+     pthread_mutex_lock(&vtctx->lock);
+ 
+@@ -428,8 +495,75 @@ static int vtenc_q_pop(VTEncContext *vtctx, bool wait, CMSampleBufferRef *buf, E
+         return 0;
+     }
+ 
++    /*
++     * Max-inflight cap: see the VT_SYNC_MAX_INFLIGHT comment near the top of this file. Only
++     * ever downgrades deadline_us (0 is always safe/no-op here); never upgrades a caller's
++     * deadline_us==0 (unbounded-already) into something bounded. Read under the lock we're
++     * already holding, so this is consistent with the frame_ct_out this same call is about to
++     * possibly increment below -- no separate synchronization needed.
++     */
++    if (deadline_us > 0 && (vtctx->frame_ct_in - vtctx->frame_ct_out) >= VT_SYNC_MAX_INFLIGHT) {
++        deadline_us = 0;
++    }
++
++    /*
++     * sync_deadline_us: bound how long a sync_output=1 live-frame pop is
++     * allowed to block. deadline_us <= 0 (includes every caller other than
++     * vtenc_frame()'s live-frame path -- flush always passes 0) means "no
++     * deadline", falling straight through to the pre-existing unbounded
++     * pthread_cond_wait below: byte-identical to sync_output's original
++     * behavior. deadline_us > 0 computes a single absolute wall-clock
++     * deadline *once*, before the wait loop, and uses
++     * pthread_cond_timedwait against it. Absolute (not relative) is
++     * required for correctness across spurious wakeups: the loop below can
++     * re-enter the wait after a spurious return without recomputing or
++     * drifting the remaining budget, because the target instant, not a
++     * duration, is what's passed in on every iteration.
++     */
++    if (wait && deadline_us > 0) {
++        struct timeval now;
++        int64_t abs_us;
++
++        gettimeofday(&now, NULL);
++        abs_us = (int64_t)now.tv_sec * 1000000LL + now.tv_usec + deadline_us;
++        deadline_ts.tv_sec  = abs_us / 1000000LL;
++        deadline_ts.tv_nsec = (abs_us % 1000000LL) * 1000LL;
++    }
++
+     while (!vtctx->q_head && !vtctx->async_error && wait && !vtctx->flushing) {
+-        pthread_cond_wait(&vtctx->cv_sample_sent, &vtctx->lock);
++        if (deadline_us > 0) {
++            int rc = pthread_cond_timedwait(&vtctx->cv_sample_sent, &vtctx->lock,
++                                            &deadline_ts);
++            if (rc == ETIMEDOUT) {
++                /*
++                 * Deadline expired with nothing completed for this frame
++                 * yet. Stop waiting and fall through to exactly the same
++                 * "nothing ready" return the non-blocking (wait=false)
++                 * path already uses below: *buf = NULL, status 0 -- the
++                 * EAGAIN-equivalent contract vtenc_frame() already handles
++                 * via its `if (!buf) goto end_nopkt;`. The frame stays in
++                 * flight in VT (this BufNode was already linked by
++                 * vtenc_send_frame() before the pop was ever attempted;
++                 * see the wait=true call site) and its packet is collected
++                 * on a later call once vtenc_output_callback() pushes it --
++                 * i.e. VT ends up with >1 frame in flight, the same
++                 * degradation the pre-sync_output async pipeline always
++                 * had, instead of this call hanging past its frame budget.
++                 */
++                break;
++            }
++            /*
++             * rc == 0: either genuinely signaled (q_head now set, or
++             * async_error/flushing now set) or a spurious wakeup with
++             * nothing changed. Either way the while condition above
++             * re-evaluates vtctx->q_head/async_error/flushing correctly;
++             * on a spurious wakeup we simply re-enter
++             * pthread_cond_timedwait with the same absolute deadline_ts,
++             * so no budget is lost or extended by re-looping.
++             */
++        } else {
++            pthread_cond_wait(&vtctx->cv_sample_sent, &vtctx->lock);
++        }
+     }
+ 
+     if (!vtctx->q_head) {
+@@ -760,6 +894,55 @@ static void vtenc_output_callback(
+     }
+ 
+     if (!sample_buffer) {
++        /*
++         * VT signals a dropped frame by invoking this callback with
++         * status == noErr, sample_buffer == NULL (and, per Apple's docs,
++         * flags & kVTEncodeInfo_FrameDropped set -- we don't need to
++         * inspect the flag itself, absence of a sample buffer already
++         * means "nothing to deliver for this frame").
++         *
++         * The original code just returned here: no enqueue, no signal,
++         * and this BufNode was never freed (a small pre-existing upstream
++         * leak, independent of sync_output).
++         *
++         * With sync_output enabled, a thread can be genuinely blocked in
++         * vtenc_q_pop()'s wait=true path via
++         * pthread_cond_wait(&vtctx->cv_sample_sent, ...) waiting
++         * specifically on the frame that just got dropped -- silently
++         * returning here would hang it forever. So when sync_output is
++         * on, push an empty (cm_buffer == NULL) marker through the normal
++         * queue exactly like a real output: vtenc_q_push() takes the
++         * lock, links it in, and signals the condvar, waking the waiter.
++         * vtenc_q_pop() already treats a queued node with a NULL
++         * cm_buffer as "no packet this cycle" (*buf = NULL, status 0),
++         * matching the existing NULL-buffer contract used by
++         * vtenc_frame(): `if (!buf) goto end_nopkt;`.
++         *
++         * With sync_output OFF (default), nothing ever waits on this
++         * condvar for a live frame (only flush does, and flush is always
++         * preceded by a synchronous, fully-drained
++         * VTCompressionSessionCompleteFrames call -- see vtenc_frame()),
++         * so there is no waiter to wake. Do NOT unconditionally push a
++         * marker here regardless of sync_output: an empty node still
++         * occupies a real slot in the BufNode FIFO and must still be
++         * individually popped before whatever real packet is queued
++         * behind it becomes visible, which shifts the non-blocking
++         * per-call drain timing by one cycle per drop even though no
++         * caller-visible packet is gained or lost. That timing shift is
++         * exactly what regressed VideoToolboxEncoderTest's
++         * LowDelayHalvingStillBroken_Documented canary (60 -> 59 packets
++         * over a fixed 120-frame run) when this push was unconditional --
++         * confirmed by A/B rebuilding just this object file against
++         * pristine release/8.1 vs. this patch with sync_output=0.
++         * Gating the push keeps the sync_output=0 (default) path
++         * byte-for-byte identical in observable behavior to stock
++         * FFmpeg; only free the leaked node instead of dropping it.
++         */
++        if (vtctx->sync_output) {
++            vtenc_q_push(vtctx, info);
++        } else {
++            vtenc_free_buf_node(info);
++        }
+         return;
+     }
+ 
+@@ -2577,7 +2760,40 @@ static av_cold int vtenc_frame(
+         goto end_nopkt;
+     }
+ 
+-    status = vtenc_q_pop(vtctx, !frame, &buf, &sei);
++    /*
++     * Structural fix for the 1-3 frame output delay: with sync_output=0
++     * (default, unchanged behavior) a live frame send (frame != NULL)
++     * always pops with wait=false, so a packet whose async VT callback
++     * hasn't fired yet by the time we reach this line is only ever
++     * collected on the *next* call to vtenc_frame -- i.e. at send N+1
++     * for frame N's packet, even though VT itself finished encoding
++     * frame N microseconds after send N returned.
++     *
++     * With sync_output=1, block here (wait=true) until this frame's
++     * packet is actually ready, exactly like the pre-existing flush
++     * path (frame == NULL) already does. This is airtight only because
++     * every path that can complete a queue entry without real output
++     * now also signals the waiter:
++     *   - normal success            -> vtenc_q_push() signals (unchanged)
++     *   - dropped frame (this patch) -> vtenc_output_callback() now
++     *     pushes an empty marker instead of silently leaking+returning
++     *   - async/session error        -> set_async_error() now broadcasts
++     * The get_frame gate above is untouched, so the legitimate
++     * "nothing to pop yet" window during initial has_b_frames warm-up
++     * (dts_delta still negative) still skips the pop entirely, for both
++     * sync_output values -- sync_output does not change when we pop,
++     * only whether we block once we've decided to.
++     *
++     * sync_deadline_us bounds that block, but only for a live frame
++     * (frame != NULL): flush (frame == NULL) always passes deadline_us=0
++     * (unbounded) regardless of the option, so a flush still fully drains
++     * VT no matter how slow it's running -- only the live-frame per-call
++     * budget degrades under load, which is the whole point (see the patch
++     * design doc's deadline-bounded-pop addendum).
++     */
++    status = vtenc_q_pop(vtctx, !frame || vtctx->sync_output,
++                         (frame && vtctx->sync_output) ? vtctx->sync_deadline_us : 0,
++                         &buf, &sei);
+     if (status) goto end_nopkt;
+     if (!buf)   goto end_nopkt;
+ 
+@@ -2668,7 +2884,7 @@ static int vtenc_populate_extradata(AVCodecContext   *avctx,
+         goto pe_cleanup;
+     }
+ 
+-    status = vtenc_q_pop(vtctx, 0, &buf, NULL);
++    status = vtenc_q_pop(vtctx, 0, 0, &buf, NULL);
+     if (status) {
+         av_log(avctx, AV_LOG_ERROR, "popping: %d\n", status);
+         goto pe_cleanup;
+@@ -2789,7 +3005,13 @@ static const enum AVPixelFormat prores_pix_fmts[] = {
+         OFFSET(spatialaq), AV_OPT_TYPE_INT, { .i64 = -1 }, -1, 1, VE }, \
+     { "max_ref_frames", \
+         "Sets the maximum number of reference frames. This only has an effect when the value is less than the maximum allowed by the profile/level.", \
+-        OFFSET(max_ref_frames), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE },
++        OFFSET(max_ref_frames), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, INT_MAX, VE }, \
++    { "sync_output", \
++        "Block each encode call until VideoToolbox's asynchronous callback delivers that call's own packet, instead of only collecting it on a later call. Eliminates the encoder's structural 1-3 frame output-collection delay at the cost of the encode call blocking for roughly one frame's encode latency.", \
++        OFFSET(sync_output), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE }, \
++    { "sync_deadline_us", \
++        "Only meaningful when sync_output=1. Caps how long the post-submit blocking pop for a live frame may wait for VideoToolbox's callback, in microseconds. 0 (default) waits unbounded, identical to sync_output's original behavior. A positive value returns with no packet (EAGAIN-equivalent, same as the non-blocking path) once the deadline passes without a completed frame, leaving that frame in flight in VT instead of stalling the caller past its frame budget -- lets sync_output degrade gracefully to the pre-patch async pipeline's behavior under transient encode-latency spikes instead of missing the caller's frame deadline outright.", \
++        OFFSET(sync_deadline_us), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 100000, VE },
+ 
+ static const AVCodecHWConfigInternal *const vt_encode_hw_configs[] = {
+         HW_CONFIG_ENCODER_FRAMES(VIDEOTOOLBOX, VIDEOTOOLBOX),

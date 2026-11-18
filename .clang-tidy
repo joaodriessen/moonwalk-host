@@ -1,0 +1,21 @@
+# Advisory-only config. Local tooling only — no CI job runs clang-tidy today
+# (.github/workflows/build.yml builds only; it does not invoke clang-tidy). Scoped to catch
+# real bugs on this ObjC/ObjC++/C++ codebase (src/, tests/) without
+# flooding on a ~30k-LOC legacy tree that isn't being modernized — cppcoreguidelines-*/modernize-*
+# are deliberately excluded.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-branch-clone,
+  -bugprone-macro-parentheses,
+  -bugprone-reserved-identifier,
+  -bugprone-exception-escape
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '^.*/src/.*'
+FormatStyle: none

@@ -1,0 +1,196 @@
+#!/bin/bash
+set -euo pipefail
+
+SOURCE_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+[ -x "$SOURCE_REPO/scripts/release.sh" ] || fail "release orchestrator is missing or not executable"
+
+REPO="$WORK/repo"
+mkdir -p "$REPO/scripts/release" "$REPO/macos-dist" "$REPO/bin"
+cp "$SOURCE_REPO/scripts/release.sh" "$REPO/scripts/release.sh"
+cat > "$REPO/macos-dist/skylight-identity.conf" <<'EOF'
+SKYLIGHT_VERSION=9.8.7-test
+SKYLIGHT_BUNDLE_ID=example.skylight
+EOF
+echo 'build/' > "$REPO/.gitignore"
+
+cat > "$REPO/scripts/release/preflight.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+cat > "$REPO/scripts/release/common.sh" <<'EOF'
+#!/bin/bash
+release_team_id() { echo TESTTEAM01; }
+release_app_digest() {
+  (cd "$1" && find . -type f -print | sort | xargs shasum -a 256) | shasum -a 256 | awk '{print $1}'
+}
+EOF
+cat > "$REPO/scripts/package-release.sh" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+app=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output-app) app="$2"; shift 2 ;;
+    --identity|--build-dir) shift 2 ;;
+    --with-tests) shift ;;
+    *) exit 64 ;;
+  esac
+done
+[ -n "$app" ]
+mkdir -p "$app/Contents/MacOS"
+printf 'signed-app\n' > "$app/Contents/MacOS/Skylight"
+count_file="${SKYLIGHT_FAKE_COUNTS:?}/package"
+count=0; [ ! -f "$count_file" ] || count="$(cat "$count_file")"
+echo $((count + 1)) > "$count_file"
+[ "${SKYLIGHT_FAKE_MUTATE_SOURCE:-0}" != 1 ] || echo '# changed during build' >> "${SKYLIGHT_FAKE_SOURCE_TO_MUTATE:?}"
+EOF
+cat > "$REPO/scripts/release/create-dmg.sh" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+[ "${1:-}" = "--replace" ] && shift
+[ "${1:-}" = "--expected-app-sha" ] && shift 2
+printf 'signed-dmg\n' > "$2"
+EOF
+cat > "$REPO/scripts/notarize-release.sh" <<'EOF'
+#!/bin/bash
+set -euo pipefail
+dmg=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dmg) dmg="$2"; shift 2 ;;
+    --identity|--notary-profile|--app) shift 2 ;;
+    *) exit 64 ;;
+  esac
+done
+printf '{"id":"fixture-submission","status":"Accepted"}\n' > "$(dirname "$dmg")/notary-result.json"
+count_file="${SKYLIGHT_FAKE_COUNTS:?}/notarize"
+count=0; [ ! -f "$count_file" ] || count="$(cat "$count_file")"
+echo $((count + 1)) > "$count_file"
+EOF
+cat > "$REPO/scripts/release/verify-artifact.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+cat > "$REPO/scripts/release/build-dependencies.sh" <<'EOF'
+#!/bin/bash
+if [ "${1:-}" = --print-manifest ]; then
+  printf 'deployment_target=14.0\nfixture=1 sha256=test\n'
+  exit 0
+fi
+exit 64
+EOF
+
+cat > "$REPO/bin/xcodebuild" <<'EOF'
+#!/bin/bash
+printf 'Xcode 26.0\nBuild version TEST\n'
+EOF
+cat > "$REPO/bin/xcrun" <<'EOF'
+#!/bin/bash
+case "$*" in
+  *--show-sdk-version*) echo 26.0 ;;
+  *--show-sdk-build-version*) echo TESTSDK ;;
+  *stapler*validate*) exit 0 ;;
+  *) exit 0 ;;
+esac
+EOF
+cat > "$REPO/bin/codesign" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+cat > "$REPO/bin/spctl" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x "$REPO/scripts/release.sh" "$REPO/scripts/package-release.sh" \
+  "$REPO/scripts/notarize-release.sh" "$REPO/scripts/release/"*.sh "$REPO/bin/"*
+
+git -C "$REPO" init -q -b main
+git -C "$REPO" config user.name Test
+git -C "$REPO" config user.email test@example.invalid
+git -C "$REPO" add .
+git -C "$REPO" commit -qm initial
+
+export PATH="$REPO/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export SKYLIGHT_FAKE_COUNTS="$WORK/counts"
+export SKYLIGHT_FAKE_SOURCE_TO_MUTATE="$REPO/macos-dist/skylight-identity.conf"
+mkdir -p "$SKYLIGHT_FAKE_COUNTS"
+
+fingerprint1="$(cd "$REPO" && scripts/release.sh --print-fingerprint)"
+fingerprint2="$(cd "$REPO" && scripts/release.sh --print-fingerprint)"
+[[ "$fingerprint1" =~ ^[0-9a-f]{64}$ ]] || fail "fingerprint is not a SHA-256"
+[ "$fingerprint1" = "$fingerprint2" ] || fail "unchanged source produced an unstable fingerprint"
+signer_a="$(cd "$REPO" && scripts/release.sh --identity signer-a --print-fingerprint)"
+signer_b="$(cd "$REPO" && scripts/release.sh --identity signer-b --print-fingerprint)"
+[ "$signer_a" != "$signer_b" ] || fail "signing identity did not alter the fingerprint"
+
+echo dirty > "$REPO/untracked"
+if (cd "$REPO" && scripts/release.sh --print-fingerprint) >"$WORK/out" 2>&1; then
+  fail "dirty source was accepted by default"
+fi
+grep -Fqi 'dirty' "$WORK/out" || fail "dirty-source error is unclear"
+dirty_fingerprint="$(cd "$REPO" && scripts/release.sh --allow-dirty --print-fingerprint)"
+[ "$dirty_fingerprint" != "$fingerprint1" ] || fail "dirty source did not alter the fingerprint"
+rm "$REPO/untracked"
+
+mkdir -p "$REPO/build/releases/.release.lock"
+echo $$ > "$REPO/build/releases/.release.lock/pid"
+if (cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet) >"$WORK/out" 2>&1; then
+  fail "concurrent release lock was ignored"
+fi
+grep -Fqi 'release is already running' "$WORK/out" || fail "lock error is unclear"
+rm "$REPO/build/releases/.release.lock/pid"
+rmdir "$REPO/build/releases/.release.lock"
+
+mkdir -p "$REPO/build/releases/.release.lock"
+
+json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet)"
+[ "$(printf '%s' "$json" | plutil -extract status raw -o - -- -)" = "complete" ] || fail "quiet result is not successful JSON"
+release_fingerprint="$(printf '%s' "$json" | plutil -extract fingerprint raw -o - -- -)"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "package stage count is wrong"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "notarize stage count is wrong"
+
+manifest="$REPO/build/releases/$release_fingerprint/release-manifest.json"
+[ -f "$manifest" ] || fail "release manifest was not written"
+[ "$(plutil -extract git.dirty raw -o - "$manifest")" = false ] || fail "manifest did not record clean source"
+[ "$(plutil -extract fingerprint raw -o - "$manifest")" = "$release_fingerprint" ] || fail "manifest fingerprint is wrong"
+[ -n "$(plutil -extract artifact.sha256 raw -o - "$manifest")" ] || fail "artifact digest is missing"
+[ -n "$(plutil -extract artifact.submittedSha256 raw -o - "$manifest")" ] || fail "submitted artifact digest is missing"
+[ -f "$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg" ] || fail "conventional DMG was not published"
+[ ! -e "$REPO/build/release/.Moonwalk-Host-9.8.7-test-macOS-arm64.dmg.tmp" ] || fail "publication left a temporary artifact"
+
+resume_json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet --resume)"
+[ "$(printf '%s' "$resume_json" | plutil -extract resumed raw -o - -- -)" = true ] || fail "resume was not reported"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "resume rebuilt a verified app"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "resume resubmitted a verified DMG"
+
+printf 'tampered\n' >> "$REPO/build/releases/$release_fingerprint/Skylight.app/Contents/MacOS/Skylight"
+(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet --resume) >/dev/null
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 2 ] || fail "corrupted resumed app was not rebuilt"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 2 ] || fail "corrupted resumed app reused old notarization"
+
+published="$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg"
+published_before="$(shasum -a 256 "$published" | awk '{print $1}')"
+mkdir -p "$WORK/failbin"
+cat > "$WORK/failbin/cp" <<'SH'
+#!/bin/bash
+exit 23
+SH
+chmod +x "$WORK/failbin/cp"
+if (cd "$REPO" && PATH="$WORK/failbin:$PATH" scripts/release.sh \
+  --identity test --notary-profile test --quiet --resume) >"$WORK/out" 2>&1; then
+  fail "publication succeeded when its copy failed"
+fi
+[ "$(shasum -a 256 "$published" | awk '{print $1}')" = "$published_before" ] || fail "failed publication damaged the previous artifact"
+
+export SKYLIGHT_FAKE_MUTATE_SOURCE=1
+if (cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet) >"$WORK/out" 2>&1; then
+  fail "release accepted source changes made during the build"
+fi
+grep -Fqi 'source changed during release' "$WORK/out" || fail "mid-build source change error is unclear"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 2 ] || fail "changed source reached notarization"
+
+echo "PASS: release orchestration is clean, locked, resumable, and compact"

@@ -1,0 +1,125 @@
+name: build
+
+# Build both native components from a clean checkout. Release signing and notarization
+# remain in scripts/release.sh; CI uses a throwaway local identity for generated XPC pins.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository:
+    name: Check privacy and documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check the current commit and release documentation
+        run: |
+          python3 scripts/check-privacy.py --commit HEAD
+          bash scripts/release/verify-artifact.sh --repo-only
+          bash scripts/release/tests/test-repo-verifier.sh
+
+  daemon-build:
+    name: Build and test the host daemon
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Homebrew dependencies
+        run: |
+          brew install \
+            cmake \
+            boost \
+            pkg-config \
+            openssl@3 \
+            opus \
+            llvm \
+            doxygen \
+            graphviz \
+            node \
+            icu4c@78 \
+            miniupnpc
+
+      - name: Generate local XPC identity
+        run: bash macos-dist/generate-identity.sh
+
+      - name: Configure
+        run: |
+          set -euo pipefail
+          SDK_PATH=$(xcrun --show-sdk-path)
+          CXX_HEADERS="$SDK_PATH/usr/include/c++/v1"
+          OPENSSL_PREFIX=$(brew --prefix openssl@3)
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_WERROR=OFF \
+            -DBUILD_TESTS=ON \
+            -DOPENSSL_ROOT_DIR="$OPENSSL_PREFIX" \
+            -DSUNSHINE_BUILD_HOMEBREW=ON \
+            -DSUNSHINE_ENABLE_TRAY=ON \
+            -DBOOST_USE_STATIC=OFF \
+            -DCMAKE_OSX_SYSROOT="$SDK_PATH" \
+            -DCMAKE_CXX_FLAGS="-nostdinc++ -cxx-isystem $CXX_HEADERS -std=gnu++2b -I$OPENSSL_PREFIX/include" \
+            -DCMAKE_C_FLAGS="-I$OPENSSL_PREFIX/include"
+
+      - name: Build the daemon, display helper and C++ tests
+        run: cmake --build build --target sunshine vd_helper test_sunshine -j "$(sysctl -n hw.ncpu)"
+
+      - name: Run C++ logic tests with isolated configuration
+        run: |
+          set -euo pipefail
+          TEST_ROOT="$RUNNER_TEMP/moonwalk-host-cpp-tests"
+          mkdir -p "$TEST_ROOT/home" "$TEST_ROOT/config" "$TEST_ROOT/logs"
+          export HOME="$TEST_ROOT/home"
+          export XDG_CONFIG_HOME="$TEST_ROOT/config"
+          export GCOV_PREFIX="$TEST_ROOT/coverage"
+          TEST_BINARY="$GITHUB_WORKSPACE/build/tests/test_sunshine"
+          cd "$TEST_ROOT"
+          TEST_FILTER='-MouseInputs/*:Configurations/AudioTest.*:EncoderVariants/*'
+          printf '%s\n' "$TEST_FILTER" > logs/filter.txt
+          "$TEST_BINARY" --gtest_list_tests > logs/discovery-all.log
+          "$TEST_BINARY" "--gtest_filter=$TEST_FILTER" --gtest_list_tests | tee logs/discovery.log
+          TEST_COUNT=$(awk '/^  / { count++ } END { print count + 0 }' logs/discovery.log)
+          [ "$TEST_COUNT" -gt 0 ] || { echo 'ERROR: no C++ tests discovered' >&2; exit 1; }
+          echo "Discovered $TEST_COUNT C++ tests"
+          "$TEST_BINARY" "--gtest_filter=$TEST_FILTER" --gtest_color=no --gtest_output="xml:$TEST_ROOT/logs/results.xml" 2>&1 | tee logs/results.log
+
+      - name: Verify Apple Silicon binaries
+        run: |
+          lipo -verify_arch arm64 build/sunshine
+          lipo -verify_arch arm64 build/vd_helper
+
+  menu-app-build:
+    name: Build and test the menu app
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+        with:
+          persist-credentials: false
+
+      - name: Generate identity (creates a throwaway local signing cert)
+        run: bash macos-dist/generate-identity.sh
+
+      - name: Build and test Swift package
+        run: |
+          cd macos-dist/SkylightMenu
+          swift build -c release
+          swift test -c release
