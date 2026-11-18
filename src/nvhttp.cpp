@@ -1066,25 +1066,8 @@ namespace nvhttp {
 
   template<class T>
   void print_req(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
-    BOOST_LOG(debug) << "TUNNEL :: "sv << tunnel<T>::to_string;
-
-    BOOST_LOG(debug) << "METHOD :: "sv << request->method;
-    BOOST_LOG(debug) << "DESTINATION :: "sv << request->path;
-
-    for (auto &[name, val] : request->header) {
-      BOOST_LOG(debug) << name << " -- " << (name == "Authorization" ? "CREDENTIALS REDACTED" : val);
-    }
-
-    BOOST_LOG(debug) << " [--] "sv;
-
-    for (auto &[name, val] : request->parse_query_string()) {
-      bool sensitive = name == "salt" || name == "clientchallenge" || name == "serverchallengeresp" ||
-                        name == "clientpairingsecret" || name == "clientcert" ||
-                        name == "rikey" || name == "rikeyid";
-      BOOST_LOG(debug) << name << " -- " << (sensitive ? "REDACTED" : val);
-    }
-
-    BOOST_LOG(debug) << " [--] "sv;
+    // Headers and query values can contain credentials and file paths.
+    BOOST_LOG(debug) << tunnel<T>::to_string << ' ' << request->method << ' ' << request->path;
   }
 
   template<class T>

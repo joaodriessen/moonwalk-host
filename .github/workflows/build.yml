@@ -24,10 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Check the current commit and release documentation
+      - name: Check new commits and release documentation
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
-          python3 scripts/check-privacy.py --commit HEAD
+          test "$(git rev-list --max-parents=0 HEAD | wc -l)" -eq 1
+          base=$(git rev-parse --verify --quiet --end-of-options "$BASE_REF^{commit}") || base=""
+          for revision in $(git rev-list HEAD ${base:+"^$base"}); do
+            python3 scripts/check-privacy.py --commit "$revision"
+          done
           bash scripts/release/verify-artifact.sh --repo-only
           bash scripts/release/tests/test-repo-verifier.sh
 

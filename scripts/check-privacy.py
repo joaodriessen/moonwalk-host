@@ -15,7 +15,7 @@ PAIRING_TEST = PurePosixPath("tests/unit/test_http_pairing.cpp")
 PAIRING_TEST_KEY_SHA256 = "cb3c1dd0b7418aebd91109a35b867dfeb45e5be0db3499ba4ba69db7b42c500b"
 PRIVATE_PATH = re.compile(rb"(?i)(?:/home/|/Users/|[A-Z]:[/\\]Users[/\\])([\w.-]+)[/\\]")
 EXAMPLE_HOME = {b"builder", b"example", b"someone", b"alice", b"bob", b"myuser"}
-PRIVATE_FILES = re.compile(r"(?i)(?:\.(?:env|pfx|p12|key|etl|pcapng?|log|sqlite3?)$|^\.env\.|"
+PRIVATE_FILES = re.compile(r"(?i)(?:\.(?:env|pfx|p12|key|etl|pcapng?|log|sqlite3?|dmg|keychain-db|ips)$|^\.env\.|"
                            r"^(?:credentials\.json|known_hosts|id_(?:rsa|ecdsa|ed25519|dsa))$)")
 PRIVATE_DIRS = {".claude", ".codex", ".ssh", ".gnupg", ".superpowers"}
 PNG = b"\x89PNG\r\n\x1a\n"

@@ -48,4 +48,4 @@ Pair only devices you trust. A paired device can control your Mac while the host
 
 Start with [Building](docs/BUILDING.md), [Contributing](CONTRIBUTING.md), or the [architecture notes](docs/architecture.md). [All documentation](docs/README.md)
 
-Moonwalk Host builds on [Sunshine](https://github.com/LizardByte/Sunshine) and the macOS work in [Lumen](https://github.com/trollzem/Lumen). It uses the GameStream-compatible protocol supported by [Moonlight](https://moonlight-stream.org/). [GPL-3.0-only](LICENSE) · [Third-party notices](NOTICE)
+Moonwalk Host builds on [Sunshine](https://github.com/LizardByte/Sunshine) and the macOS work in [Lumen](https://github.com/trollzem/Lumen). It uses the GameStream-compatible protocol supported by [Moonlight](https://moonlight-stream.org/). [GPL-3.0-only](LICENSE) · [Third-party code](docs/third-party.md)

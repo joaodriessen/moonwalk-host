@@ -34,4 +34,4 @@ Run from a clean Git checkout with a Developer ID Application certificate and an
   --quiet
 ```
 
-The command tests and builds the recorded commit in isolation, signs the app, notarizes the DMG and verifies the stapled artifact. The DMG, stage logs and provenance manifest are written under `build/releases/`. Use `--resume` with the same inputs to continue a build after interruption. Keep signing material and the local output outside Git. [Release checklist](releasing.md)
+The command tests and builds the recorded commit in isolation. It signs and notarizes the app before packing it into a signed, notarized DMG. It then mounts the DMG and checks the app inside. The DMG, stage logs and provenance manifest are written under `build/releases/`. Use `--resume` with the same inputs to continue a build after interruption. Keep signing material and the local output outside Git. [Release checklist](releasing.md)

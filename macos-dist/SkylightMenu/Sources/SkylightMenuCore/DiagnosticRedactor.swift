@@ -5,7 +5,9 @@ public enum DiagnosticRedactor {
         var output = input
         let replacements: [(String, String)] = [
             (#"(?s)-----BEGIN [^-]+-----.*?-----END [^-]+-----"#, "[REDACTED_PEM]"),
-            (#"(?i)(authorization\s*:\s*bearer\s+)[^\s]+"#, "$1[REDACTED_TOKEN]"),
+            (#"(?i)(authorization\s*:\s*(?:basic|bearer)\s+)[^\s]+"#, "$1[REDACTED_TOKEN]"),
+            (#"(?im)^((?:\[[^\r\n\]]+\]:\s*debug:\s*)?[a-z][a-z0-9_-]*\s+--\s+)[^\r\n]+"#, "$1[REDACTED]"),
+            (#"(?im)(\bconfig:\s*'[^'\r\n]+'\s*=\s*)[^\r\n]+"#, "$1[REDACTED]"),
             (#"(?i)\b(token|password|passwd|pin|username)\s*=\s*[^\s]+"#, "$1=[REDACTED]"),
             (#"(?i)\b(client_name|device_name)\s*=\s*[^\r\n]+"#, "$1=[REDACTED_NAME]"),
             (#"(?i)\buuid\s*=\s*[0-9a-f-]{16,}"#, "uuid=[REDACTED_UUID]"),

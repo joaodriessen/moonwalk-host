@@ -1,12 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.0-alpha.16 (candidate)
 
 - Moved Moonwalk Host to its own source repository. The app’s bundle identifiers, pairing storage and configuration paths stay the same.
 - Rewrote the install and troubleshooting guides, updated the Moonwalk preview, and added a release checklist for testing on real Macs.
 - Added a repository privacy check and updated Apple Silicon CI.
 - Fixed clean builds of the signed installer when the shared dependency cache is empty.
 - Updated the optional web settings dependencies and removed the unused Codecov plugin.
+- Pointed the web settings page to Moonwalk Host releases and source instead of
+  offering unrelated Sunshine updates.
+- Removed request headers and parameters from daemon debug logging and improved
+  redaction when exporting older logs.
+- Include the native and web dependency licenses in the installer and
+  document where to get their exact source revisions.
+- Staple the app’s notarization ticket before packaging it and verify the app
+  inside the finished DMG.
 
 ## Earlier private alpha builds
 

@@ -26,6 +26,11 @@ done
 [ -f "$APP/Contents/Resources/Assets.car" ] || fail "layered app icon is missing"
 [ -f "$APP/Contents/Resources/LICENSE.txt" ] || fail "license is missing"
 [ -f "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt" ] || fail "third-party notices are missing"
+for notice in native/openssl/LICENSE.txt native/ffmpeg/COPYING.GPLv2 native/boost/LICENSE_1_0.txt \
+  native/x264/COPYING native/x265/COPYING native/svt-av1/LICENSE.md \
+  web/@lizardbyte/shared-web/LICENSE web/@vue/devtools-api/LICENSE; do
+  [ -s "$APP/Contents/Resources/ThirdPartyLicenses/$notice" ] || fail "missing dependency notice: $notice"
+done
 [ -f "$APP/Contents/Resources/Defaults/sunshine.conf" ] || fail "default host config is missing"
 [ -f "$APP/Contents/Resources/Defaults/apps.json" ] || fail "default apps config is missing"
 [ ! -e "$APP/Contents/Resources/assets/Info.plist" ] || fail "dead upstream CPack Info.plist was shipped inside assets"

@@ -25,3 +25,20 @@ import Testing
     let once = DiagnosticRedactor.redact("token=top-secret ip=10.0.0.4")
     #expect(DiagnosticRedactor.redact(once) == once)
 }
+
+@Test func omitsRequestValuesAndSettingValuesFromOlderLogs() {
+    let input = """
+    [00:05:09]: Debug: authorization -- Basic example-creds
+    [00:05:09]: Debug: file -- sensitive-document.txt
+    x-session-token -- generated-test-token
+    Authorization: Basic basic-example
+    [00:05:09]: Info: config: 'sunshine_name' = Private Room
+    [00:05:10]: Info: session 1280x720 @ 60 fps
+    """
+    let output = DiagnosticRedactor.redact(input)
+    for value in ["example-creds", "sensitive-document", "generated-test-token", "basic-example", "Private Room"] {
+        #expect(!output.contains(value))
+    }
+    #expect(output.contains("sunshine_name"))
+    #expect(output.contains("1280x720 @ 60 fps"))
+}

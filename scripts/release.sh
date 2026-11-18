@@ -89,6 +89,8 @@ SOURCE="$CANDIDATE/source"
 DMG_NAME="Moonwalk-Host-$SKYLIGHT_VERSION-macOS-arm64.dmg"
 DMG="$CANDIDATE/$DMG_NAME"
 MANIFEST="$CANDIDATE/release-manifest.json"
+STAPLED_DIGEST="$CANDIDATE/stapled-app.sha256"
+APP_NOTARY_RESULT="$CANDIDATE/notary-app-result.json"
 PUBLISHED="$REPO/build/release/$DMG_NAME"
 LOCK="$RELEASES/.release.lock"
 
@@ -155,6 +157,14 @@ validate_complete() {
   xcrun stapler validate "$DMG" >/dev/null 2>&1 || return 1
   spctl --assess --type execute "$APP" >/dev/null 2>&1 || return 1
   spctl --assess --type open --context context:primary-signature "$DMG" >/dev/null 2>&1 || return 1
+  "$DIR/release/verify-dmg-payload.sh" "$DMG" "$APP" >/dev/null 2>&1 || return 1
+}
+
+stapled_app_is_valid() {
+  [ -f "$STAPLED_DIGEST" ] && [ -s "$APP_NOTARY_RESULT" ] &&
+    [ "$(cat "$STAPLED_DIGEST")" = "$(release_app_digest "$APP" 2>/dev/null)" ] &&
+    [ "$(plutil -extract status raw -o - "$APP_NOTARY_RESULT" 2>/dev/null)" = Accepted ] &&
+    xcrun stapler validate "$APP" >/dev/null 2>&1
 }
 
 write_manifest() {
@@ -191,6 +201,7 @@ write_manifest() {
   plutil -insert app -dictionary "$tmp"
   plutil -insert app.submittedSha256 -string "$submitted_app_sha" "$tmp"
   plutil -insert app.finalSha256 -string "$final_app_sha" "$tmp"
+  plutil -insert app.notarizationId -string "$APP_NOTARY_ID" "$tmp"
   plutil -insert artifact -dictionary "$tmp"
   plutil -insert artifact.path -string "$DMG" "$tmp"
   plutil -insert artifact.submittedSha256 -string "$submitted_dmg_sha" "$tmp"
@@ -228,10 +239,12 @@ if [ "$RESUME" -eq 1 ] && validate_complete; then
 fi
 
 if [ "$RESUME" -eq 1 ] && [ -f "$CANDIDATE/build.complete" ] && [ -f "$CANDIDATE/build-app.sha256" ] && \
-   [ "$(cat "$CANDIDATE/build-app.sha256")" = "$(release_app_digest "$APP" 2>/dev/null || true)" ] && \
+   { stapled_app_is_valid ||
+     [ "$(cat "$CANDIDATE/build-app.sha256")" = "$(release_app_digest "$APP" 2>/dev/null || true)" ]; } && \
    "$DIR/release/verify-artifact.sh" --team-id "$TEAM_ID" "$APP" >/dev/null 2>&1; then
   [ "$QUIET" -eq 1 ] || echo "build        reused"
 else
+  unlink "$STAPLED_DIGEST" 2>/dev/null || true
   if [ "$DIRTY" = false ]; then
     prepare_source() {
       local tmp="$SOURCE.staging.$$"
@@ -257,10 +270,17 @@ else
 fi
 
 stage source assert_source_unchanged
-SUBMITTED_APP_SHA="$(release_app_digest "$APP")"
+SUBMITTED_APP_SHA="$(cat "$CANDIDATE/build-app.sha256")"
+if [ "$RESUME" -eq 1 ] && stapled_app_is_valid; then
+  [ "$QUIET" -eq 1 ] || echo "notarize-app reused"
+else
+  stage notarize-app "$DIR/notarize-release.sh" --identity "$IDENTITY" --notary-profile "$PROFILE" --app "$APP"
+  release_app_digest "$APP" > "$STAPLED_DIGEST"
+fi
+FINAL_APP_SHA="$(cat "$STAPLED_DIGEST")"
 create_signed_dmg() {
-  "$DIR/release/create-dmg.sh" --replace --expected-app-sha "$SUBMITTED_APP_SHA" "$APP" "$DMG" || return 1
-  [ "$(release_app_digest "$APP")" = "$SUBMITTED_APP_SHA" ] || {
+  "$DIR/release/create-dmg.sh" --replace --expected-app-sha "$FINAL_APP_SHA" "$APP" "$DMG" || return 1
+  [ "$(release_app_digest "$APP")" = "$FINAL_APP_SHA" ] || {
     echo "ERROR: frozen app changed while creating the DMG" >&2
     return 1
   }
@@ -268,10 +288,11 @@ create_signed_dmg() {
 }
 stage dmg create_signed_dmg
 SUBMITTED_DMG_SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
-stage notarize "$DIR/notarize-release.sh" --identity "$IDENTITY" --notary-profile "$PROFILE" --app "$APP" --dmg "$DMG"
+stage notarize-dmg "$DIR/notarize-release.sh" --identity "$IDENTITY" --notary-profile "$PROFILE" --dmg "$DMG"
+stage verify-payload "$DIR/release/verify-dmg-payload.sh" "$DMG" "$APP"
 
-FINAL_APP_SHA="$(release_app_digest "$APP")"
 DMG_SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+APP_NOTARY_ID="$(plutil -extract id raw -o - "$APP_NOTARY_RESULT")"
 NOTARY_ID="$(plutil -extract id raw -o - "$CANDIDATE/notary-result.json")"
 NOTARY_STATUS="$(plutil -extract status raw -o - "$CANDIDATE/notary-result.json")"
 write_manifest "$SUBMITTED_APP_SHA" "$FINAL_APP_SHA" "$SUBMITTED_DMG_SHA" "$DMG_SHA" false

@@ -60,27 +60,40 @@ cat > "$REPO/scripts/release/create-dmg.sh" <<'EOF'
 set -euo pipefail
 [ "${1:-}" = "--replace" ] && shift
 [ "${1:-}" = "--expected-app-sha" ] && shift 2
+[ -f "$1/Contents/CodeResources" ] || { echo "fixture app must be stapled before DMG creation" >&2; exit 1; }
 printf 'signed-dmg\n' > "$2"
 EOF
 cat > "$REPO/scripts/notarize-release.sh" <<'EOF'
 #!/bin/bash
 set -euo pipefail
-dmg=""
+app="" dmg=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dmg) dmg="$2"; shift 2 ;;
-    --identity|--notary-profile|--app) shift 2 ;;
+    --app) app="$2"; shift 2 ;;
+    --identity|--notary-profile) shift 2 ;;
     *) exit 64 ;;
   esac
 done
-printf '{"id":"fixture-submission","status":"Accepted"}\n' > "$(dirname "$dmg")/notary-result.json"
-count_file="${SKYLIGHT_FAKE_COUNTS:?}/notarize"
+if [ -z "$dmg" ]; then
+  printf 'stapled-ticket\n' > "$app/Contents/CodeResources"
+  printf '{"id":"fixture-app-submission","status":"Accepted"}\n' > "$(dirname "$app")/notary-app-result.json"
+  count_file="${SKYLIGHT_FAKE_COUNTS:?}/notarize-app"
+else
+  printf '{"id":"fixture-submission","status":"Accepted"}\n' > "$(dirname "$dmg")/notary-result.json"
+  count_file="${SKYLIGHT_FAKE_COUNTS:?}/notarize"
+fi
 count=0; [ ! -f "$count_file" ] || count="$(cat "$count_file")"
 echo $((count + 1)) > "$count_file"
 EOF
 cat > "$REPO/scripts/release/verify-artifact.sh" <<'EOF'
 #!/bin/bash
 exit 0
+EOF
+cat > "$REPO/scripts/release/verify-dmg-payload.sh" <<'EOF'
+#!/bin/bash
+set -e
+[ -f "$1" ] && [ -f "$2/Contents/CodeResources" ]
 EOF
 cat > "$REPO/scripts/release/build-dependencies.sh" <<'EOF'
 #!/bin/bash
@@ -158,6 +171,7 @@ json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test -
 [ "$(printf '%s' "$json" | plutil -extract status raw -o - -- -)" = "complete" ] || fail "quiet result is not successful JSON"
 release_fingerprint="$(printf '%s' "$json" | plutil -extract fingerprint raw -o - -- -)"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "package stage count is wrong"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")" = 1 ] || fail "app notarize stage count is wrong"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "notarize stage count is wrong"
 [ -d "$REPO/build/release-deps/fixture" ] || fail "clean snapshot did not use the shared dependency cache"
 
@@ -167,12 +181,14 @@ manifest="$REPO/build/releases/$release_fingerprint/release-manifest.json"
 [ "$(plutil -extract fingerprint raw -o - "$manifest")" = "$release_fingerprint" ] || fail "manifest fingerprint is wrong"
 [ -n "$(plutil -extract artifact.sha256 raw -o - "$manifest")" ] || fail "artifact digest is missing"
 [ -n "$(plutil -extract artifact.submittedSha256 raw -o - "$manifest")" ] || fail "submitted artifact digest is missing"
+[ "$(plutil -extract app.notarizationId raw -o - "$manifest")" = fixture-app-submission ] || fail "app notarization is missing"
 [ -f "$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg" ] || fail "conventional DMG was not published"
 [ ! -e "$REPO/build/release/.Moonwalk-Host-9.8.7-test-macOS-arm64.dmg.tmp" ] || fail "publication left a temporary artifact"
 
 resume_json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet --resume)"
 [ "$(printf '%s' "$resume_json" | plutil -extract resumed raw -o - -- -)" = true ] || fail "resume was not reported"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "resume rebuilt a verified app"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")" = 1 ] || fail "resume resubmitted a verified app"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "resume resubmitted a verified DMG"
 
 printf 'tampered\n' >> "$REPO/build/releases/$release_fingerprint/Skylight.app/Contents/MacOS/Skylight"

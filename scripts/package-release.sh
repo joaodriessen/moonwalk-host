@@ -65,6 +65,7 @@ PKG_CONFIG_LIBDIR="$DEPS/lib/pkgconfig" \
     -DOPENSSL_SSL_LIBRARY="$DEPS/lib/libssl.a" \
     -DOPENSSL_INCLUDE_DIR="$DEPS/include" \
     -DCMAKE_DISABLE_FIND_PACKAGE_Boost=TRUE \
+    -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=TRUE \
     -DBOOST_USE_STATIC=ON \
     -DBOOST_LOCALE_ENABLE_ICU=OFF \
     -DBOOST_LOCALE_ENABLE_ICONV=OFF \
@@ -124,6 +125,8 @@ cp "$REPO/src_assets/common/assets/web/config_schema.json" "$APP/Contents/Resour
 cp -R "$REPO/macos-dist/SkylightMenu/Lucide/pdf" "$APP/Contents/Resources/Lucide"
 cp "$REPO/LICENSE" "$APP/Contents/Resources/LICENSE.txt"
 cp "$REPO/NOTICE" "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+python3 "$DIR/release/install-notices.py" "$DEPS_ROOT" "$(dirname "$FFMPEG_PREFIX")" "$BUILD" \
+  "$APP/Contents/Resources/ThirdPartyLicenses"
 mkdir -p "$APP/Contents/Resources/Defaults"
 cp "$REPO/macos-dist/sunshine.conf.example" "$APP/Contents/Resources/Defaults/sunshine.conf"
 cp "$REPO/src_assets/macos/assets/apps.json" "$APP/Contents/Resources/Defaults/apps.json"
@@ -156,7 +159,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSHasLocalizedDisplayName</key><true/>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleIdentifier</key><string>$SKYLIGHT_BUNDLE_ID</string>
-  <key>CFBundleVersion</key><string>3</string>
+  <key>CFBundleVersion</key><string>4</string>
   <key>SkylightSourceRevision</key><string>$SOURCE_REVISION</string>
   <key>CFBundleShortVersionString</key><string>$SKYLIGHT_VERSION</string>
   <key>CFBundlePackageType</key><string>APPL</string>
@@ -167,7 +170,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSMicrophoneUsageDescription</key><string>Moonwalk Host uses the audio source you select to stream sound and test its signal.</string>
-  <key>NSLocalNetworkUsageDescription</key><string>Moonwalk Host streams your Mac to Moonwalk clients you pair on your local network.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Moonwalk and Moonlight use your local network to find and connect to this Mac.</string>
 </dict></plist>
 PLIST
 

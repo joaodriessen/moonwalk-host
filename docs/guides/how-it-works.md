@@ -39,4 +39,4 @@ Any compatible Moonlight client uses the same basic video, sound and input proto
 | 48000 | UDP | Audio |
 | 47990 | TCP | Optional web settings |
 
-Moonwalk Host advertises the `_nvstream._tcp` service through mDNS. The optional web settings page is off by default. When used, it can request resources from GitHub, `app.lizardbyte.dev` and `images.igdb.com`. Router setup through UPnP is off by default. [Security](../../SECURITY.md) · [Architecture](../architecture.md)
+Moonwalk Host advertises the `_nvstream._tcp` service through mDNS. The optional web settings page is off by default. Its app catalogue and artwork search can request resources from `app.lizardbyte.dev` and `images.igdb.com`. Router setup through UPnP is off by default. [Security](../../SECURITY.md) · [Architecture](../architecture.md)

@@ -174,24 +174,11 @@ namespace confighttp {
   };
 
   /**
-   * @brief Log the request details.
+   * @brief Log the method and route without request credentials or parameters.
    * @param request The HTTP request object.
    */
   void print_req(const req_https_t &request) {
-    BOOST_LOG(debug) << "METHOD :: "sv << request->method;
-    BOOST_LOG(debug) << "DESTINATION :: "sv << request->path;
-
-    for (auto &[name, val] : request->header) {
-      BOOST_LOG(debug) << name << " -- " << (name == "Authorization" ? "CREDENTIALS REDACTED" : val);
-    }
-
-    BOOST_LOG(debug) << " [--] "sv;
-
-    for (auto &[name, val] : request->parse_query_string()) {
-      BOOST_LOG(debug) << name << " -- " << val;
-    }
-
-    BOOST_LOG(debug) << " [--] "sv;
+    BOOST_LOG(debug) << "Web settings "sv << request->method << ' ' << request->path;
   }
 
   /**
@@ -1374,6 +1361,8 @@ namespace confighttp {
     for (auto &[name, value] : vars) {
       output_tree[name] = std::move(value);
     }
+    output_tree["host_version"] = SKYLIGHT_VERSION;
+    output_tree["source_revision"] = PROJECT_VERSION_COMMIT;
 
     send_response(response, output_tree);
   }

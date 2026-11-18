@@ -1,6 +1,8 @@
 # Build artifacts
 build/
 node_modules/
+__pycache__/
+*.dmg
 
 # Regenerated into the source tree on every cmake configure (BUILD_DOCS=ON,
 # third-party/doxyconfig copies these into docs/) — docs/Doxyfile itself is a real tracked

@@ -54,16 +54,16 @@ endif()
 #WebUI build
 find_program(NPM npm REQUIRED)
 
-set(NPM_INSTALL_FLAGS "--ignore-scripts")
+set(NPM_INSTALL_FLAGS --ignore-scripts --no-audit --no-fund)
 if (NPM_OFFLINE)
-    set(NPM_INSTALL_FLAGS "${NPM_INSTALL_FLAGS} --offline")
+    list(APPEND NPM_INSTALL_FLAGS --offline)
 endif()
 
 add_custom_target(web-ui ALL
         WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
         COMMENT "Installing NPM Dependencies and Building the Web UI"
-        COMMAND "$<$<BOOL:${WIN32}>:cmd;/C>" "${NPM}" install ${NPM_INSTALL_FLAGS}
-        COMMAND "${CMAKE_COMMAND}" -E env "SUNSHINE_BUILD_HOMEBREW=${NPM_BUILD_HOMEBREW}" "SUNSHINE_SOURCE_ASSETS_DIR=${NPM_SOURCE_ASSETS_DIR}" "SUNSHINE_ASSETS_DIR=${NPM_ASSETS_DIR}" "$<$<BOOL:${WIN32}>:cmd;/C>" "${NPM}" run build  # cmake-lint: disable=C0301
+        COMMAND "$<$<BOOL:${WIN32}>:cmd;/C>" "${NPM}" ci ${NPM_INSTALL_FLAGS}
+        COMMAND "${CMAKE_COMMAND}" -E env "SUNSHINE_BUILD_HOMEBREW=${NPM_BUILD_HOMEBREW}" "SUNSHINE_SOURCE_ASSETS_DIR=${NPM_SOURCE_ASSETS_DIR}" "SUNSHINE_ASSETS_DIR=${NPM_ASSETS_DIR}" "$<$<BOOL:${WIN32}>:cmd;/C>" "${NPM}" run build-clean  # cmake-lint: disable=C0301
         # config_schema.json is served verbatim from WEB_DIR by confighttp's /api/configSchema
         # AND read by the XPC control service (src/platform/macos/xpc_control.mm). Vite does not
         # emit it (not JS-imported, not in publicDir), so copy it into the built web dir AFTER the

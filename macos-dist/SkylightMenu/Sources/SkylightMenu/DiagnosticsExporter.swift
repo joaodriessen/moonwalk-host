@@ -28,7 +28,7 @@ enum DiagnosticsExporter {
         permissions: PermissionState
     ) async throws -> URL {
         let facts = """
-        Skylight \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")
+        Moonwalk Host \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")
         menu-source \(Bundle.main.object(forInfoDictionaryKey: "SkylightSourceRevision") as? String ?? "unknown")
         host-version \(session.appVersion.isEmpty ? "unknown" : session.appVersion)
         host-source \(session.sourceRevision.isEmpty ? "unknown" : session.sourceRevision)

@@ -11,4 +11,4 @@
 | Build or contribute | [Building](BUILDING.md) and [Contributing](../CONTRIBUTING.md) |
 | Test or package a release | [Release checklist](releasing.md) and [Bundle layout](release-surface.md) |
 
-[Common questions](guides/faq.md) · [Architecture](architecture.md) · [Security](../SECURITY.md) · [Source provenance](origin.md)
+[Common questions](guides/faq.md) · [Architecture](architecture.md) · [Security](../SECURITY.md) · [Third-party code](third-party.md)

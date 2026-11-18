@@ -5,7 +5,7 @@ SOURCE_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 REPO="$WORK/repo"
-mkdir -p "$REPO/scripts/release" "$REPO/docs" "$REPO/macos-dist" \
+mkdir -p "$REPO/scripts/release" "$REPO/docs" "$REPO/macos-dist" "$REPO/patches" \
   "$REPO/.github/ISSUE_TEMPLATE" "$REPO/.github/workflows"
 cp "$SOURCE_REPO/scripts/release/verify-artifact.sh" "$REPO/scripts/release/"
 cp "$SOURCE_REPO/README.md" "$SOURCE_REPO/CONTRIBUTING.md" "$SOURCE_REPO/SECURITY.md" "$SOURCE_REPO/CHANGELOG.md" \
@@ -16,6 +16,7 @@ cp -R "$SOURCE_REPO/docs/assets" "$REPO/docs/assets"
 cp "$SOURCE_REPO/.github/ISSUE_TEMPLATE/"*.yml "$REPO/.github/ISSUE_TEMPLATE/"
 cp "$SOURCE_REPO/.github/workflows/build.yml" "$REPO/.github/workflows/"
 cp "$SOURCE_REPO/macos-dist/README.md" "$REPO/macos-dist/"
+cp "$SOURCE_REPO/patches/README.md" "$REPO/patches/"
 git -C "$REPO" init -q
 git -C "$REPO" add .
 
