@@ -40,7 +40,7 @@ esac
 
 FIXTURE="$WORK/repo/scripts/release"
 mkdir -p "$FIXTURE"
-cp "$SCRIPT" "$FIXTURE/build-dependencies.sh"
+cp "$SCRIPT" "$REPO/scripts/release/build-ffmpeg.sh" "$FIXTURE/"
 root_before="$("$FIXTURE/build-dependencies.sh" --print-root)"
 printf '\n# recipe mutation\n' >> "$FIXTURE/build-dependencies.sh"
 root_after="$("$FIXTURE/build-dependencies.sh" --print-root)"

@@ -235,12 +235,12 @@ else
   if [ "$DIRTY" = false ]; then
     prepare_source() {
       local tmp="$SOURCE.staging.$$"
-      rm -rf "$tmp"
-      mkdir -p "$tmp"
-      git archive "$COMMIT" | tar -xf - -C "$tmp"
-      mkdir -p "$tmp/build"
-      ln -s "$REPO/build/release-deps" "$tmp/build/release-deps"
-      rm -rf "$SOURCE"
+      rm -rf "$tmp" || return 1
+      mkdir -p "$tmp" || return 1
+      git archive "$COMMIT" | tar -xf - -C "$tmp" || return 1
+      mkdir -p "$tmp/build" "$REPO/build/release-deps" || return 1
+      ln -s "$REPO/build/release-deps" "$tmp/build/release-deps" || return 1
+      rm -rf "$SOURCE" || return 1
       mv "$tmp" "$SOURCE"
     }
     stage snapshot prepare_source

@@ -10,6 +10,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 REPO="$WORK/repo"
 mkdir -p "$REPO/scripts/release" "$REPO/macos-dist" "$REPO/bin"
+SHASUM_DIR="$(dirname "$(command -v shasum)")"
 cp "$SOURCE_REPO/scripts/release.sh" "$REPO/scripts/release.sh"
 cat > "$REPO/macos-dist/skylight-identity.conf" <<'EOF'
 SKYLIGHT_VERSION=9.8.7-test
@@ -41,6 +42,12 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 [ -n "$app" ]
+# A clean candidate uses the shared dependency cache through a symlink.
+# Exercise directory creation there before writing the mock bundle.
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -L "$repo/build/release-deps" ]; then
+  mkdir -p "$repo/build/release-deps/fixture"
+fi
 mkdir -p "$app/Contents/MacOS"
 printf 'signed-app\n' > "$app/Contents/MacOS/Skylight"
 count_file="${SKYLIGHT_FAKE_COUNTS:?}/package"
@@ -114,7 +121,7 @@ git -C "$REPO" config user.email test@example.invalid
 git -C "$REPO" add .
 git -C "$REPO" commit -qm initial
 
-export PATH="$REPO/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+export PATH="$REPO/bin:$SHASUM_DIR:/usr/bin:/bin:/usr/sbin:/sbin"
 export SKYLIGHT_FAKE_COUNTS="$WORK/counts"
 export SKYLIGHT_FAKE_SOURCE_TO_MUTATE="$REPO/macos-dist/skylight-identity.conf"
 mkdir -p "$SKYLIGHT_FAKE_COUNTS"
@@ -152,6 +159,7 @@ json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test -
 release_fingerprint="$(printf '%s' "$json" | plutil -extract fingerprint raw -o - -- -)"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "package stage count is wrong"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "notarize stage count is wrong"
+[ -d "$REPO/build/release-deps/fixture" ] || fail "clean snapshot did not use the shared dependency cache"
 
 manifest="$REPO/build/releases/$release_fingerprint/release-manifest.json"
 [ -f "$manifest" ] || fail "release manifest was not written"

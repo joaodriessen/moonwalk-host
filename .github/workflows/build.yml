@@ -123,3 +123,9 @@ jobs:
           cd macos-dist/SkylightMenu
           swift build -c release
           swift test -c release
+
+      - name: Check native packaging scripts
+        run: |
+          bash scripts/release/tests/test-build-dependencies.sh
+          bash scripts/release/tests/test-release-orchestrator.sh
+          bash macos-dist/tests/test-rotate-logs.sh
