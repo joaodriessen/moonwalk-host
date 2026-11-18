@@ -101,8 +101,8 @@ jobs:
 
       - name: Verify Apple Silicon binaries
         run: |
-          lipo -verify_arch arm64 build/sunshine
-          lipo -verify_arch arm64 build/vd_helper
+          lipo build/sunshine -verify_arch arm64
+          lipo build/vd_helper -verify_arch arm64
 
   menu-app-build:
     name: Build and test the menu app
