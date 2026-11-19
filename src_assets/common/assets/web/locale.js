@@ -3,25 +3,31 @@ import {createI18n} from "vue-i18n";
 // Import only the fallback language files
 import en from './public/assets/locale/en.json'
 
-export default async function() {
-    let r = await (await fetch("./api/configLocale")).json();
-    let locale = r.locale ?? "en";
-    document.querySelector('html').setAttribute('lang', locale);
-    let messages = {
-        en
-    };
+async function fetchLocaleJson(url) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
     try {
-        if (locale !== 'en') {
-            let r = await (await fetch(`./assets/locale/${locale}.json`)).json();
-            messages[locale] = r;
-        }
-    } catch (e) {
-        console.error("Failed to download translations", e);
+        const response = await fetch(url, {signal: controller.signal});
+        return response.ok ? await response.json() : null;
+    } catch {
+        return null;
+    } finally {
+        clearTimeout(timeout);
     }
-    const i18n = createI18n({
-        locale: locale, // set locale
-        fallbackLocale: 'en', // set fallback locale
-        messages: messages
-    })
-    return i18n;
+}
+
+export default async function() {
+    let locale = 'en';
+    const messages = { en };
+    // The bundled English strings keep setup usable while the service starts.
+    const selected = (await fetchLocaleJson('./api/configLocale'))?.locale;
+    if (typeof selected === 'string' && selected !== 'en' && /^[a-z]{2,3}(?:_[A-Z]{2})?$/.test(selected)) {
+        const dictionary = await fetchLocaleJson(`./assets/locale/${selected}.json`);
+        if (dictionary && typeof dictionary === 'object' && !Array.isArray(dictionary)) {
+            messages[selected] = dictionary;
+            locale = selected;
+        }
+    }
+    document.documentElement.lang = locale.replace('_', '-');
+    return createI18n({locale, fallbackLocale: 'en', messages});
 }

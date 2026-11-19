@@ -1,5 +1,5 @@
 {
-  "name": "skylight",
+  "name": "moonwalk-host",
   "version": "0.0.0",
   "scripts": {
     "build": "vite build",

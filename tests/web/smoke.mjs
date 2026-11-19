@@ -17,6 +17,8 @@ const settings = {
   source_revision: 'synthetic-source', sunshine_name: 'Example Mac', extra_setting: 'retained',
 };
 let loadStatus = 200;
+let localeStatus = 200;
+let selectedLocale = 'en';
 let saveReply = { status: false };
 let restartReply = { status: false };
 const saves = [];
@@ -38,7 +40,10 @@ function sendJSON(res, body, status = 200, headers = {}) {
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
   try {
-    if (path === '/api/configLocale') return sendJSON(res, { locale: 'en' });
+    if (path === '/api/configLocale') {
+      if (localeStatus !== 200) return res.writeHead(localeStatus).end('Temporarily unavailable');
+      return sendJSON(res, { locale: selectedLocale });
+    }
     if (path === '/api/config' && req.method === 'POST') {
       let body = '';
       for await (const chunk of req) body += chunk;
@@ -226,6 +231,19 @@ try {
     await openPage('/apps');
     await until(() => evaluate('Array.from(document.querySelectorAll(".app-initial")).map(el => el.textContent).join("") === "EM"'), 'missing cover fallback');
     await click('Edit');
+    assert.equal(await evaluate('document.querySelectorAll(\'label[for="appName"]\').length'), 1);
+    await click('Add Commands');
+    await click('Add Detached Command');
+    assert.equal(await evaluate(`(() => {
+      const form = document.querySelector('.edit-form');
+      const groups = [...form.querySelectorAll('[role="group"][aria-labelledby][aria-describedby]')];
+      return groups.length === 2 && groups.every(group =>
+        document.getElementById(group.getAttribute('aria-labelledby'))?.textContent.trim()
+        && document.getElementById(group.getAttribute('aria-describedby'))?.textContent.trim()
+        && [...group.querySelectorAll('input, button')].every(el => el.getAttribute('aria-label')?.trim()));
+    })()`), true);
+    await evaluate('document.querySelector(\'[aria-label="Remove preparation command 1"]\').click()');
+    await evaluate('document.querySelector(\'[aria-label="Remove background command 1"]\').click()');
     await evaluate('(() => { const field = document.getElementById("appName"); field.value = "Edited Desktop"; field.dispatchEvent(new Event("input", {bubbles:true})); })()');
     appTag = '"concurrent"';
     await click('Save');
@@ -251,6 +269,22 @@ try {
     await until(() => evaluate('document.querySelector(".navbar-brand") && !document.querySelector(\'[aria-label="Delete Example Desktop"]\')'), 'reloaded list after delete');
     assert.equal(appChanges[3].tag, '"changed-before-delete"');
     assert.equal(apps.length, 1);
+
+    localeStatus = 503;
+    await openPage('/welcome');
+    assert.equal(await evaluate('document.documentElement.lang'), 'en');
+    await hasText('Choose a username and password');
+    await openPage('/config');
+    await hasText('Configuration');
+    localeStatus = 200;
+    selectedLocale = 'en_GB';
+    await openPage('/welcome');
+    assert.equal(await evaluate('document.documentElement.lang'), 'en-GB');
+    selectedLocale = 'zz';
+    await openPage('/welcome');
+    assert.equal(await evaluate('document.documentElement.lang'), 'en');
+    await hasText('Choose a username and password');
+    selectedLocale = 'en';
 
     pendingPairings = [{ uniqueid: 'example-request', source_ip: '192.0.2.10', age_sec: 1 }];
     await openPage('/pin');
@@ -278,7 +312,8 @@ try {
     assert.equal(pairingRequests.length, 3);
     assert.deepEqual(jsErrors, []);
     console.log('Confirmed load failure, functional settings save, edits preserved, correct request body, restart denial, lost response and acknowledgement.');
-    console.log('Confirmed cover fallback, draft preservation and application revision checks for both edits and deletion.');
+    console.log('Confirmed cover fallback, named command fields and buttons, draft preservation, and application revision checks.');
+    console.log('Confirmed English fallback for failed language requests and a missing catalog, and normal British English selection.');
     console.log('Confirmed explicit device selection, rejected and lost PIN responses, and acknowledgement without claiming pairing is complete.');
   }
 } finally {
