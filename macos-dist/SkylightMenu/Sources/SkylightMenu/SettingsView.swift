@@ -10,8 +10,7 @@ struct SettingsView: View {
     var host: HostConnection
     var loginItem: LoginItemManager
     var restart: RestartCoordinator
-    /// Hosts the pairing sheet (docs/design/2026-07-18-pairing-attached-to-settings.md) -- shared
-    /// from `SkylightMenuApp`, same lifetime/pattern as `restart` above.
+    /// The menu and Settings share the same pairing sheet state.
     var pairing: PairingPresentation
     var permissionSetup: PermissionSetupCoordinator
     var quitConfirmation: QuitConfirmation
@@ -31,10 +30,8 @@ struct SettingsView: View {
     @State private var unpairSessionId: Int?
     @State private var showUnpairAllConfirm = false
 
-    /// Audit defect 3: a base-port change is destructive-adjacent (breaks pairing/discovery), so
-    /// it's staged here and only actually written on explicit confirm, rather than committing the
-    /// moment the field parses (papercut 5(b) later swapped the entry control itself from a
-    /// `Stepper` to a typed `TextField`, but this staging/confirm behavior is unchanged).
+    /// Apply a new base port only after confirmation, since it changes how
+    /// paired clients reach this host.
     @State private var pendingPort: Int?
 
     /// Preserve text typed while a configuration read or earlier save is in flight.
@@ -175,9 +172,6 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
             Button("Unpair All", role: .destructive) { performUnpairAll() }
         } message: {
-            // Audit defect 4: name the actual device count and both consequences, matching the
-            // per-device alert's clarity ("It will need a new PIN to connect again.") instead of
-            // only stating the session-drop half.
             Text("This unpairs all \(host.paired.count) paired device\(host.paired.count == 1 ? "" : "s"). Each will need a new PIN to connect again, and this ends any session in progress.")
         }
         .alert("Change the base port?", isPresented: Binding(
@@ -275,9 +269,6 @@ struct SettingsView: View {
             }
         }
         .listStyle(.sidebar)
-        // No `.navigationTitle` here (audit defect 7): in a NavigationSplitView the detail pane's
-        // own `.navigationTitle(section.title)` below wins, so a second one on the sidebar was
-        // dead code. The window's own title comes from the `Window(...)` scene declaration.
     }
 
     // MARK: - Detail
@@ -711,28 +702,13 @@ struct SettingsView: View {
 
                     Divider()
 
-                    // A bare `HStack { Spacer(); Button }` with no leading label reads, on a
-                    // macOS Form row, as a big block of empty space with a button floating at the
-                    // far right -- exactly the "unused space above the buttons" the owner flagged,
-                    // live-verified before this fix. Every other row on this pane pairs its
-                    // control with a caption; give this one the same `LabeledContent` treatment
-                    // "Unpair All Devices…" already uses below, so the row has real content to
-                    // anchor it instead of reading as dead space.
                     LabeledContent {
                         pairNewDeviceAction
                     } label: {
                         rowCaption("Add another device to stream to this Mac.")
                     }
 
-                    // Audit defect 4: a disclosure hiding exactly one button saved no space and
-                    // cost a discoverability hit for a genuinely useful (if rare) action — dropped
-                    // in favor of a plain row below the per-device list, set off by a Divider so it
-                    // doesn't read as just another device. Trigger stays neutral pre-confirm (see
-                    // papercut 5(a): red is reserved for the alert's own destructive button, same
-                    // convention as Restart/Fix Display Issues) — the per-device `.link`+red
-                    // Unpair above is a separate, pre-existing pattern left as-is. Right-aligned via
-                    // `LabeledContent` (item 5), the caption as the leading label, matching the
-                    // Restart/Fix Display Issues treatment on the Status pane.
+                    // The confirmation carries the destructive action.
                     LabeledContent {
                         Button("Unpair All Devices…") {
                             showUnpairAllConfirm = true

@@ -30,9 +30,8 @@ import Foundation
 ///   shutdownHostWithReply:                      shutdownHost(withReply:)
 ///   menuHeartbeatWithReply:                     menuHeartbeat(withReply:)
 ///
-/// `max_bitrate`/`QualityPreset` were removed from this app entirely (owner decision, Skylight
-/// ONE redesign): no selector, no schema-key binding anywhere in this target. The host's bitrate
-/// ceiling is config-file-only now; Starlight (the client) is the sole quality surface.
+/// The host's bitrate ceiling is configured in the host file. The client
+/// controls the bitrate it requests for a stream.
 @objc(SkylightControl)
 protocol SkylightControl {
     func getConnectionInfo(withReply reply: @escaping (String) -> Void)
@@ -174,19 +173,11 @@ protocol SkylightControl {
     /// a bug, and the calling UI's destructive confirm must name it. Reply `Bool` success.
     func unpairAllClients(withReply reply: @escaping (Bool) -> Void)
 
-    /// Daemon lifecycle coupling (docs/design/2026-07-19-daemon-lifecycle-coupling.md §3 "Quit
-    /// flow"): call this BEFORE `NSApplication.shared.terminate(nil)` on "Quit Skylight". The
-    /// host acks immediately (this reply fires right away) then, ~200ms later, raises the same
-    /// graceful self-shutdown every other lifecycle trigger uses -- ending any active stream and
-    /// releasing the virtual display. Best-effort: if the daemon is unreachable the reply simply
-    /// never arrives (see `HostConnection.shutdownHost()`'s ≤1s timeout) and the menu quits
-    /// anyway; the daemon's own NOTE_EXIT/self-check backstop tears it down independently.
+    /// Acknowledge the request before the daemon ends the stream and releases
+    /// the virtual display. The daemon also exits if it loses the menu process.
     func shutdownHost(withReply reply: @escaping () -> Void)
 
-    /// Daemon lifecycle coupling §2C: a cheap no-op called on a dedicated ~2s timer while
-    /// connected (see `HostConnection`'s heartbeat timer) -- its only purpose is refreshing the
-    /// host's `last_validated_contact` for the presence-window self-check backstop. Carries no
-    /// payload either direction; the validated round trip itself IS the signal.
+    /// Refresh the validated connection's presence timer with an empty reply.
     func menuHeartbeat(withReply reply: @escaping () -> Void)
 }
 

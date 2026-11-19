@@ -14,7 +14,7 @@ The menu bar app and daemon run in the logged-in macOS user session. The menu ow
 
 ## Starting and stopping
 
-The packaged menu app registers the embedded LaunchAgent through `SMAppService`. The daemon uses XPC to verify that the signed menu has attached before starting its public-facing service. It also checks menu presence when accepting a session. Normal quit asks the daemon to shut down. The daemon watches menu exit and has a stale-contact fallback.
+The packaged menu app registers the embedded LaunchAgent through `SMAppService`. The daemon waits for the signed menu to connect over XPC before advertising on the local network or opening pairing and streaming listeners. It checks menu presence again when accepting a session. Quitting the menu asks the daemon to shut down. The daemon also watches for menu exit and stops if contact goes stale.
 
 The menu and daemon verify each other’s signing identities. Developer builds use a local certificate. Release builds pin the Apple Developer ID team and code identifiers. The existing bundle, service labels and storage paths form part of the install and upgrade contract. [Bundle layout](release-surface.md)
 

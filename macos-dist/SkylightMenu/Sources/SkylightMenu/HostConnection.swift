@@ -81,10 +81,6 @@ final class HostConnection {
     private(set) var status: HostStatus = .connecting
     private(set) var richStatus = RichStatus()
 
-    // The two hand-crafted daily toggles (docs/design/menubar-app.md S1). Hide Cursor was
-    // removed from this app entirely (owner decision, Tahoe-native redesign): the daemon keeps
-    // its XPC handler, but no Swift code in this target calls it anymore -- see
-    // `SkylightControlProtocol.swift`'s doc comment for the corresponding protocol removal.
     private(set) var virtualDisplay = false
     private(set) var quitOnDisconnect = false
 
@@ -226,14 +222,7 @@ final class HostConnection {
     }
 
     func connect() {
-        // Idempotency guard (audit defect: connect() churned a healthy connection on every
-        // redundant call, e.g. MenuContent's `onAppear { host.connect() }` firing on every
-        // menu-bar click). If a connection already exists and the last thing we heard from
-        // it was a successful `refresh()` (status == .connected), there's nothing to do --
-        // tearing it down and reconnecting would flicker the status line and orphan the old
-        // connection's in-flight XPC calls for no reason. Reconnect paths (interruption/
-        // invalidation -> scheduleReconnect -> connect(), or an explicit stale-connection
-        // recovery) all run with status != .connected, so they're unaffected.
+        // Reopening the menu should keep a validated connection and its pending replies.
         guard !(status == .connected && connection != nil) else {
             SkylightLog.lifecycle.info("connect() called while already connected -- skipping redundant reconnect")
             return

@@ -51,17 +51,8 @@ struct SectionChip: View {
     }
 }
 
-/// The in-section "Advanced" disclosure: collapsed, last in its section, semantic text styles
-/// (no fixed-pixel fonts — a Tahoe anti-pattern the redesign corrects).
-///
-/// Audit defect 3: vanilla SwiftUI `DisclosureGroup` on macOS only registers clicks on the
-/// chevron glyph itself — clicking the "Advanced" / caption label does nothing, the opposite of
-/// HIG disclosure-control convention and of how Finder/System Settings rows behave (whole row is
-/// the hit target — developer.apple.com/design/human-interface-guidelines/disclosure-controls).
-/// `.contentShape(Rectangle())` + `.onTapGesture` on the label makes the whole row toggle the same
-/// `isExpanded` binding the chevron already drives; the chevron itself keeps working natively
-/// since `DisclosureGroup` isn't otherwise touched. A pointing-hand cursor on hover makes the
-/// row's clickability discoverable, matching the affordance macOS gives real buttons/links.
+/// Make the label and chevron toggle the same disclosure state. The label's
+/// tap target spans the row so it behaves like a macOS disclosure control.
 struct AdvancedDisclosure<Content: View>: View {
     @State private var isExpanded = false
     @ViewBuilder let content: Content
@@ -124,13 +115,9 @@ struct RestartBanner: View {
     }
 }
 
-// MARK: - Copy fix (audit defect 4): hand-written encoder-speed labels
+// MARK: - Encoder preset labels
 
-/// `SoftwarePreset.label` (`SkylightMenuCore`) is `rawValue.capitalized`, which renders
-/// "Veryfast"/"Ultrafast"/"Veryslow" — not real words. Rather than editing that Core type, this is
-/// a hand-written display map layered on top via an extension in this (different) file/module
-/// target, used everywhere the picker shows a preset. The stored `rawValue` — the x264 token
-/// actually written to disk — is untouched.
+/// Display readable names while storing the encoder's original preset token.
 extension SoftwarePreset {
     var displayLabel: String {
         switch self {

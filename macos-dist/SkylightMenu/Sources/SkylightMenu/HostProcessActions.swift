@@ -1,14 +1,8 @@
 import Foundation
 import SkylightMenuCore
 
-/// S3 "Restart Host" / "Run Rescue" (docs/design/menubar-app.md "S3"). Shells the commands out
-/// directly via `Process` rather than adding new host-side XPC methods -- option (b) from the
-/// design brief, chosen for S3 simplicity: this app already runs as the SAME user as the
-/// `com.lumen.sunshine` daemon, so it can invoke `launchctl kickstart` and the rescue script
-/// exactly as the S1/S2 stub alerts already told the user to do manually from Terminal. No new
-/// XPC surface, no mid-call connection-teardown problem a host-side `restartHost()` would have
-/// to solve (kickstarting the daemon that is answering the XPC call would kill the connection
-/// before it could reply).
+/// Restart and recovery run in the menu user's service session, since a
+/// restart would interrupt a reply from the daemon itself.
 enum HostProcessActions {
     struct ActionResult: Sendable {
         let success: Bool
@@ -110,13 +104,8 @@ enum HostProcessActions {
             do {
                 try task.run()
 
-                // Bounded execution (audit defect: no execution timeout left isWorking/spinner
-                // state stuck forever against a wedged skylight-rescue.sh or similar script).
-                // If the deadline passes with the child still running, escalate SIGTERM -> a
-                // short grace -> SIGKILL -- the same ladder shape used elsewhere in this
-                // codebase for wedged children -- then keep waiting unconditionally (SIGKILL
-                // can't be ignored, so this cannot hang) until it actually exits, so no zombie
-                // is left behind.
+                // Time out stalled child processes, allow a short graceful
+                // exit, and reap the child after escalating if necessary.
                 var timedOut = false
                 if exited.wait(timeout: .now() + timeout) == .timedOut {
                     timedOut = true

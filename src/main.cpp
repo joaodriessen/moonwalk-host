@@ -29,20 +29,13 @@ extern "C" {
 }
 
 #if defined(__APPLE__) || defined(__MACH__)
-  // Capture gate (docs/design/2026-07-19-daemon-lifecycle-coupling.md §2B.1) -- same guarded-
-  // include pattern used elsewhere for macOS-only platform headers (e.g. nvhttp.cpp's
-  // platform/macos/misc.h include).
   #include "platform/macos/xpc_control.h"
 #endif
 
 using namespace std::literals;
 
 #if defined(__APPLE__) || defined(__MACH__)
-  // How long the startup capture gate (below) waits for a validated SkylightMenu peer to attach
-  // before giving up and shutting down without ever starting mDNS/pairing/streaming (docs/design/
-  // 2026-07-19-daemon-lifecycle-coupling.md §2B.1, §9.1). A judgment call, not a measured value --
-  // live-tune on real hardware (too short risks killing a slow cold launch; too long widens the
-  // menu-less window, though the session-acceptance gate bounds that worst case regardless).
+  // Allow the menu app time to complete the signed XPC handshake on a cold launch.
   constexpr std::chrono::seconds kCaptureGateGrace {10};
 #endif
 
@@ -397,22 +390,9 @@ int main(int argc, char *argv[]) {
   }
 
 #if defined(__APPLE__) || defined(__MACH__)
-  // Capture gate (RISK 1, docs/design/2026-07-19-daemon-lifecycle-coupling.md §2B.1): by this
-  // point `platf::init()` above has already started the capture-inert XPC control listener
-  // (platf::macos::start_xpc_control_service(), misc.mm:105) -- it accepts a validated
-  // SkylightMenu peer connection but never touches capture/mDNS/pairing/streaming. This daemon
-  // must not advertise (mDNS), pair, or serve a stream session until a code-signature-validated
-  // menu peer is actually attached, so block here rather than starting any of those services
-  // unconditionally.
-  //
-  // NOTE (deviation from the design doc's literal text, reported per the design's own
-  // "STOP and report" instruction): the design says a timeout should "raise shutdown_event (the
-  // existing main.cpp:400 peek returns cleanly)". That pre-existing peek runs AFTER
-  // platf::publish::start() (mDNS) has already been kicked off asynchronously a few lines below
-  // -- relying on it alone would NOT guarantee mDNS never starts. So this gate returns
-  // immediately in its own failure branch, before ever reaching the mDNS/upnp async block, which
-  // is what actually delivers "never started mDNS/nvhttp/rtsp" rather than merely reusing the
-  // existing (too-late-for-this-purpose) check.
+  // At this point only the local XPC control service is available. Keep the
+  // early return before mDNS and network listeners so a failed menu handshake
+  // never exposes discovery, pairing, or streaming.
   if (!platf::macos::wait_for_validated_menu(kCaptureGateGrace)) {
     BOOST_LOG(warning) << "No validated SkylightMenu peer attached within "sv
                         << std::chrono::duration_cast<std::chrono::seconds>(kCaptureGateGrace).count()
@@ -455,13 +435,9 @@ int main(int argc, char *argv[]) {
 #endif
 
 #if defined(__APPLE__) || defined(__MACH__)
-  // Always initialize the tray on macOS, regardless of config::sunshine.system_tray: this is
-  // what sets the vendored lib's static NSApplication (third-party/tray/src/tray_darwin.m
-  // tray_init()) that mainThreadLoop()'s pump depends on for capture liveness (memory
-  // f006d058). Run it headless so SkylightMenu remains the sole visible menu-bar icon --
-  // system_tray becomes an inert legacy config key on this platform (documented in
-  // settings-ux.md). A user (or a stale conf) setting system_tray=false no longer disables the
-  // pump, closing the latent footgun that caused the prior outage.
+  // Capture depends on the AppKit event pump initialized by the tray library.
+  // Start it headless regardless of the legacy system_tray setting so only
+  // the menu app presents an icon.
   if (tray_is_enabled) {
     BOOST_LOG(info) << "Starting system tray (headless; SkylightMenu owns the visible menu-bar icon)"sv;
     system_tray::set_headless(true);

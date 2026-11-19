@@ -2,18 +2,8 @@ import SwiftUI
 import AppKit
 import SkylightMenuCore
 
-/// Settings — Status: the "missing piece" (design doc §2.2). First sidebar item, System-Settings
-/// style. Read + remediate: daemon reachability, live session stats, paired-device count,
-/// permission grants, and general maintenance actions — all data already flows over XPC through
-/// the existing `HostConnection` surface (`richStatus`, `permissionState`, `paired`, `status`), so
-/// there is no new backend and no new XPC method here. Rows are read-outs (`LabeledContent`), not
-/// controls; remediation buttons live next to the state they explain (Restart Skylight next to
-/// reachability's offline case; Check Permissions next to an ungranted permission), per the
-/// design's "remediation belongs next to what it fixes" rule.
-///
-/// The window-level restart-pending banner (`RestartBanner`, driven by `RestartCoordinator`) is
-/// rendered by `SettingsView` above every pane, Status included — this view does not duplicate it
-/// with a second in-form "restart pending" row.
+/// Host status, permissions, and recovery actions shown in Settings. The
+/// enclosing Settings window owns the shared restart banner.
 struct StatusPaneView: View {
     var host: HostConnection
     var restart: RestartCoordinator
@@ -30,10 +20,7 @@ struct StatusPaneView: View {
     @State private var showUninstallConfirm = false
     @State private var diagnosticsTask: Task<Void, Never>?
 
-    /// Item 3 (General → Status merge): the former `SettingsView.generalForm`'s uncommitted
-    /// `sunshine_name` draft/error state, moved here with it. Scoped to this one field (unlike
-    /// `SettingsView`'s multi-key `drafts`/`fieldErrors` dictionaries) since this pane only ever
-    /// writes this one generic string key.
+    /// The draft lives with the other pending settings edits.
     private var sunshineNameDraft: String? {
         get { host.settings.drafts["sunshine_name"] }
         nonmutating set { host.settings.drafts["sunshine_name"] = newValue }
@@ -181,13 +168,9 @@ struct StatusPaneView: View {
             .accessibilityLabel("Error: \(message)")
     }
 
-    // MARK: - General (item 3: merged in from the retired General tab)
+    // MARK: - General
 
-    /// Audit defect 2: `host.configValues["sunshine_name"]` mirrors the raw `sunshine.conf` file
-    /// only (empty when the key is absent) — it never reflects the runtime default the daemon
-    /// actually computes and advertises to pairing/discovering clients, which is this Mac's real
-    /// network hostname. `Host.current().localizedName` is the user-facing computer name, the
-    /// same identity the empty-key runtime default resolves to.
+    /// When no custom name is saved, discovery uses the Mac's computer name.
     private var resolvedMacName: String { Host.current().localizedName ?? "This Mac" }
 
     private var detailedLoggingBinding: Binding<Bool> {

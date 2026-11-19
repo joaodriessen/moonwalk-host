@@ -275,12 +275,8 @@ TEST_F(ProcessPNGTest, ValidateAppImagePath_OldSteamDefault) {
   EXPECT_EQ(result, SUNSHINE_ASSETS_DIR "/steam.png");
 }
 
-// Regression LOCKS (not red-green -- see docs/superpowers/plans/2026-08-14-first-alpha-
-// stabilization.md Task 4). These lock behavior the 2026-08-14 prep-cmd-failure dossier proved
-// already correct: a failing prep_cmds[0].do_cmd makes execute() return non-zero, leaves
-// proc_t retryable (running() == 0), and the undo loop only ever fires for cmds that actually
-// succeeded (never for the failed cmd itself, never for cmds after it). Expected green on first
-// run.
+// A failed preparation must leave launch retryable and undo only the steps
+// that completed successfully.
 class ProcPrepCmdTest: public ::testing::Test {
 protected:
   void SetUp() override {
