@@ -61,16 +61,16 @@ struct FirstRunView: View {
 
     private var message: String {
         switch coordinator.state.phase {
-        case .moveToApplications: "Drag Moonwalk Host into Applications, then open that copy. This lets macOS manage its background service reliably."
-        case .creatingConfiguration: "Creating private defaults without replacing any existing settings."
-        case .registerService: "Registering the bundled, on-demand host. It runs only when Moonwalk Host needs it."
-        case .approveService: "macOS needs your approval before Moonwalk Host can start its bundled host."
-        case .waitingForHost: "Waiting for the signed streaming host to connect."
-        case .permissions: "Moonwalk Host needs Screen Recording and Accessibility to stream and control this Mac."
-        case .readyToPair: "On your other device, open Moonwalk or Moonlight on the same local network. Select “\(host.advertisedName)”, choose Pair, then enter the PIN on this Mac. If it does not appear, use Add Host on the client with this Mac’s local network address."
+        case .moveToApplications: "Drag Moonwalk Host into Applications, then open that copy."
+        case .creatingConfiguration: "Preparing settings for this Mac."
+        case .registerService: "Setting up the background streaming service."
+        case .approveService: "Turn on Moonwalk Host in Login Items so it can start the streaming service."
+        case .waitingForHost: "Waiting for the streaming service to start."
+        case .permissions: "Allow Screen Recording to share the desktop and Accessibility to use the keyboard and mouse from another device."
+        case .readyToPair: "Open Moonwalk on Linux or a Moonlight client on another device. Select “\(host.advertisedName)” there to get a PIN. Then click Pair a Device here."
         case .failed(let detail): detail
-        case .complete: "Setup is complete."
-        case .evaluating: "Checking the app, host, and permissions."
+        case .complete: "You can connect from a paired device on your network."
+        case .evaluating: "Checking the streaming service and macOS permissions."
         }
     }
 
@@ -95,8 +95,10 @@ struct FirstRunView: View {
                     dismissWindow(id: SkylightMenuApp.firstRunWindowID)
                 }.keyboardShortcut(.defaultAction)
             }
-            Text("This Mac is ready. You can pair a device later from the Moonwalk Host menu.")
-                .font(.footnote).foregroundStyle(.secondary)
+            Link("Get Moonwalk for Linux", destination: URL(string:
+                "https://github.com/joaodriessen/moonwalk/blob/main/docs/guides/getting-started.md#install-moonwalk")!)
+                .font(.footnote)
+            Text("You can also pair later from the Moonwalk Host menu.").font(.footnote).foregroundStyle(.secondary)
         case .failed:
             HostRepairView(host: host)
             Button("Try Again") {

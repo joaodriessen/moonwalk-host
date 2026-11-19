@@ -1,10 +1,11 @@
 # Install Moonwalk Host
 
-Set up Moonwalk Host on the Mac you want to control. Have these ready:
-
-- an Apple Silicon Mac on macOS 14 or later
-- a device to connect from, with [Moonwalk](https://github.com/joaodriessen/moonwalk) (Linux) or [Moonlight](https://moonlight-stream.org/) installed
-- both on the same local network
+Set up Moonwalk Host on the Mac you want to use from Linux. It needs Apple
+Silicon and macOS 14 or later. Install **Moonwalk** on Linux, or use a
+**Moonlight** client on another device. Connect both computers to the same
+local network.
+[Get Moonwalk for Linux](https://github.com/joaodriessen/moonwalk/blob/main/docs/guides/getting-started.md#install-moonwalk) ·
+[Get Moonlight](https://moonlight-stream.org/)
 
 ## 1. Copy it to Applications
 
@@ -39,9 +40,13 @@ You may see other requests later. If you pick a microphone as the sound source, 
 
 ## 3. Pair your first device
 
-Pairing proves that you control both devices. You do it once for each device.
+Pairing needs both devices the first time. The client shows the PIN and
+Moonwalk Host asks for it on the Mac.
 
-1. On your other device, open Moonwalk or Moonlight and select your Mac. It shows a four-digit PIN.
+1. On your other device, open Moonwalk or Moonlight and select your Mac to
+   get a four-digit PIN. If it doesn't show up, copy an address from
+   **Moonwalk Host → Settings… → Network** and paste it into **Add Host** in
+   the client.
 2. On the Mac, click the Moonwalk Host icon in the menu bar and choose **Pair New Device…**. During setup, you can press **Pair a Device** instead.
 3. Select your device’s row, enter the PIN and press **Pair Device**.
 
@@ -49,7 +54,9 @@ When a device asks to pair, the menu item shows a dot and you get a notification
 
 ## 4. Connect
 
-Your Mac now shows as ready on your other device. Connect from there. In Moonwalk, press **Connect**. In Moonlight, open your Mac and choose **Desktop**. While you're streaming, the Moonwalk Host menu shows the device's name and the video format.
+Leave the Mac awake and logged in. In Moonwalk on Linux, click **Connect**.
+In Moonlight, open your Mac and choose **Desktop**. The menu bar on the
+Mac shows which device is streaming and the video format.
 
 ## Everyday use
 

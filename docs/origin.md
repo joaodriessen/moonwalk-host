@@ -4,4 +4,6 @@ Moonwalk Host was originally developed as Skylight. This repository starts with 
 
 The host derives from [Sunshine](https://github.com/LizardByte/Sunshine) and its macOS work in [Lumen](https://github.com/trollzem/Lumen). The LICENSE, NOTICE, source notices and vendored dependency licenses are included. The `third-party/` sources are checked in directly. No submodule checkout is necessary.
 
-The Linux client screenshot in the README comes from Moonwalk’s synthetic preview at commit `92b210fc5ff228eda8c6341b109b35f1e373e2e9`. The preview uses example devices. It does not record a live stream.
+The README diagram shows which app runs on each computer and which way the
+picture, sound, and input travel. For screenshots of the Linux app, see
+[Moonwalk's screenshot guide](https://github.com/joaodriessen/moonwalk/blob/main/docs/screenshots.md).

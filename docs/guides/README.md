@@ -1,14 +1,12 @@
-# Moonwalk Host guides
+# Using Moonwalk Host
 
-New here? Start with **[Install Moonwalk Host](../INSTALL.md)**.
+**[Set up your Mac](../INSTALL.md).** Install the menu app, grant the two
+macOS permissions, and pair from Linux or another client.
 
-| Guide | What's in it |
-| --- | --- |
-| [Install Moonwalk Host](../INSTALL.md) | Install, set up, pair, update and remove |
-| [Settings](settings.md) | The menu, each settings page, and what to change |
-| [Performance](performance.md) | What to try when the picture stutters |
-| [Troubleshooting](../TROUBLESHOOTING.md) | Common problems and fixes |
-| [Common questions](faq.md) | Short answers |
-| [How it works](how-it-works.md) | A closer look, and what Moonwalk Host does on your network |
+- [Share a physical display or change the sound source](settings.md)
+- [Fix a missing Mac, a black screen, or a permission problem](../TROUBLESHOOTING.md)
+- [Work out why a stream is slow](performance.md)
+- [See which Macs and clients are supported](../compatibility.md)
+- [See what happens during a connection](how-it-works.md)
 
-Building or changing the code? See the [documentation index](../README.md).
+[Common questions](faq.md) · [Project documentation](../README.md)

@@ -2,6 +2,8 @@
 
 ## 0.4.0-alpha.16 (candidate)
 
+- Show which device should display the PIN in first-run setup, and link
+  directly to the Moonwalk install guide for Linux.
 - Moved Moonwalk Host to its own source repository. The app’s bundle identifiers, pairing storage and configuration paths stay the same.
 - Rewrote the install and troubleshooting guides, updated the Moonwalk preview, and added a release checklist for testing on real Macs.
 - Added a repository privacy check and updated Apple Silicon CI.
