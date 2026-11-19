@@ -177,6 +177,7 @@ release_fingerprint="$(printf '%s' "$json" | plutil -extract fingerprint raw -o 
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")" = 1 ] || fail "app notarize stage count is wrong"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 1 ] || fail "notarize stage count is wrong"
 [ -d "$REPO/build/release-deps/fixture" ] || fail "clean snapshot did not use the shared dependency cache"
+[ ! -e "$REPO/build/releases/$release_fingerprint/source" ] || fail "completed release retained its build snapshot"
 
 manifest="$REPO/build/releases/$release_fingerprint/release-manifest.json"
 [ -f "$manifest" ] || fail "release manifest was not written"
@@ -236,5 +237,6 @@ if (cd "$REPO" && scripts/release.sh --identity test --notary-profile test --qui
 fi
 grep -Fqi 'source changed during release' "$WORK/out" || fail "mid-build source change error is unclear"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize")" = 2 ] || fail "changed source reached notarization"
+[ -d "$REPO/build/releases/$release_fingerprint/source" ] || fail "failed build lost its snapshot for diagnosis"
 
 echo "PASS: release orchestration is clean, locked, resumable, and compact"

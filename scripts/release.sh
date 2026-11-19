@@ -219,6 +219,15 @@ publish_artifact() {
   PUBLISH_TMP=""
 }
 
+remove_build_snapshot() {
+  if [ "$DIRTY" = false ] && [ -d "$SOURCE" ]; then
+    # The signed app, installer, receipts and stage logs are outside the snapshot.
+    if ! rm -rf -- "$SOURCE"; then
+      echo "WARNING: could not fully remove the generated build snapshot: $SOURCE" >&2
+    fi
+  fi
+}
+
 emit_result() {
   local resumed="$1"
   local sha
@@ -251,6 +260,7 @@ DEPENDENCY_MANIFEST="$("$DIR/release/build-dependencies.sh" --print-manifest)"
 
 if [ "$RESUME" -eq 1 ] && validate_complete; then
   stage publish publish_artifact
+  remove_build_snapshot
   emit_result true
   exit 0
 fi
@@ -314,4 +324,5 @@ NOTARY_ID="$(plutil -extract id raw -o - "$CANDIDATE/notary-result.json")"
 NOTARY_STATUS="$(plutil -extract status raw -o - "$CANDIDATE/notary-result.json")"
 write_manifest "$SUBMITTED_APP_SHA" "$FINAL_APP_SHA" "$SUBMITTED_DMG_SHA" "$DMG_SHA" false
 stage publish publish_artifact
+remove_build_snapshot
 emit_result false

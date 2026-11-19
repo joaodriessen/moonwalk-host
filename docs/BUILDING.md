@@ -51,6 +51,10 @@ Run from a clean Git checkout with a Developer ID Application certificate and an
 
 The command tests and builds the recorded commit in isolation. It signs and notarizes the app before packing it into a signed, notarized DMG. It then mounts the DMG and checks the app inside. The DMG, stage logs and local manifest are written under `build/releases/`. Use `--resume` with the same inputs to continue a build after interruption. The [release checklist](releasing.md#share-an-installer-checksum) shows how to generate shareable source and checksum information.
 
+After a clean release succeeds, its temporary source and compiler files are
+removed. The signed app, DMG, logs and receipts stay available for `--resume`.
+An interrupted build keeps its files for diagnosis.
+
 Builds in the same checkout reuse the downloaded FFmpeg archives after
 verifying their checksums. A prepared FFmpeg build is checked against its
 recipe, compiler, SDK and the hashes of its static libraries before reuse.
