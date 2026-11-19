@@ -644,26 +644,6 @@ namespace confighttp {
   }
 
   /**
-   * @brief Get the featured apps page.
-   * @param response The HTTP response object.
-   * @param request The HTTP request object.
-   */
-  void getFeaturedPage(resp_https_t response, req_https_t request) {
-    if (!authenticate(response, request)) {
-      return;
-    }
-
-    print_req(request);
-
-    std::string content = file_handler::read_file(WEB_DIR "featured.html");
-    SimpleWeb::CaseInsensitiveMultimap headers;
-    headers.emplace("Content-Type", "text/html; charset=utf-8");
-    headers.emplace("X-Frame-Options", "DENY");
-    headers.emplace("Content-Security-Policy", "frame-ancestors 'none';");
-    response->write(content, headers);
-  }
-
-  /**
    * @brief Get the password page.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
@@ -2061,7 +2041,6 @@ namespace confighttp {
     server.resource["^/pin/?$"]["GET"] = getPinPage;
     server.resource["^/apps/?$"]["GET"] = getAppsPage;
     server.resource["^/config/?$"]["GET"] = getConfigPage;
-    server.resource["^/featured/?$"]["GET"] = getFeaturedPage;
     server.resource["^/password/?$"]["GET"] = getPasswordPage;
     server.resource["^/welcome/?$"]["GET"] = getWelcomePage;
     server.resource["^/troubleshooting/?$"]["GET"] = getTroubleshootingPage;
