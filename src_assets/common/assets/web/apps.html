@@ -244,6 +244,7 @@
               <div class="modal-header">
                 <h5 class="modal-title" id="coverFinderModalLabel">
                   <span v-if="coverSearching">{{ $t('apps.searching_covers') }}</span>
+                  <span v-else-if="coverError">{{ $t('apps.find_cover') }}</span>
                   <span v-else-if="coverCandidates.length > 0">{{ $t('apps.covers_found') }} ({{ coverCandidates.length }})</span>
                   <span v-else>{{ $t('apps.no_covers_found') }}</span>
                 </h5>
@@ -269,6 +270,7 @@
                     <a href="https://www.igdb.com/" target="_blank" rel="noopener noreferrer">IGDB</a>
                   </div>
                 </div>
+                <div v-if="coverError" role="alert" class="alert alert-danger">{{ coverError }}</div>
                 <div class="cover-results" :class="{ busy: coverFinderBusy }">
                   <div class="row">
                     <div v-if="coverSearching" class="col-12 col-sm-6 col-lg-4 mb-3">
@@ -278,14 +280,11 @@
                         </div>
                       </div>
                     </div>
-                    <div v-for="(cover,i) in coverCandidates" :key="'i'" class="col-12 col-sm-6 col-lg-3 mb-3"
-                      @click="useCover(cover)">
-                      <div class="cover-container result">
-                        <img class="rounded" :src="cover.url" />
-                      </div>
-                      <label class="d-block text-nowrap text-center text-truncate">
-                        {{cover.name}}
-                      </label>
+                    <div v-for="cover in coverCandidates" :key="cover.key" class="col-12 col-sm-6 col-lg-3 mb-3">
+                      <button type="button" class="btn w-100" :disabled="coverFinderBusy" @click="useCover(cover)">
+                        <span class="cover-container result"><img class="rounded" :src="cover.url" alt="" /></span>
+                        <span class="d-block text-nowrap text-center text-truncate">{{ cover.name }}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -434,6 +433,8 @@
         editForm: null,
         detachedCmd: "",
         coverSearching: false,
+        coverSearchId: 0,
+        coverError: null,
         coverFinderBusy: false,
         coverCandidates: [],
         coverSearchQuery: "",
@@ -532,7 +533,10 @@
         // Perform initial search with app name
         this.performCoverSearch();
       },
-      performCoverSearch() {
+      async performCoverSearch() {
+        if (this.coverFinderBusy) return;
+        const searchId = ++this.coverSearchId;
+        this.coverError = null;
         this.coverSearching = true;
         this.coverCandidates = [];
 
@@ -547,76 +551,74 @@
           return bucket;
         }
 
-        function searchCovers(name) {
-          if (!name) {
-            return Promise.resolve([]);
+        const signal = AbortSignal.timeout(10000);
+        async function searchCovers(name) {
+          if (!name) return [];
+          const database = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages";
+          async function readJson(path) {
+            const response = await fetch(database + path, { signal });
+            if (!response.ok) throw new Error('Cover search failed');
+            return response.json();
           }
-          let searchName = name.replaceAll(/\s+/g, '.').toLowerCase();
-
-          // Use raw.githubusercontent.com to avoid CORS issues as we migrate the CNAME
-          let dbUrl = "https://raw.githubusercontent.com/LizardByte/GameDB/gh-pages";
-          let bucket = getSearchBucket(name);
-          return fetch(`${dbUrl}/buckets/${bucket}.json`).then(function (r) {
-            if (!r.ok) throw new Error("Failed to search covers");
-            return r.json();
-          }).then(maps => Promise.all(Object.keys(maps).map(id => {
-            let item = maps[id];
-            if (item.name.replaceAll(/\s+/g, '.').toLowerCase().startsWith(searchName)) {
-              return fetch(`${dbUrl}/games/${id}.json`).then(function (r) {
-                return r.json();
-              }).catch(() => null);
+          const index = await readJson(`/buckets/${getSearchBucket(name)}.json`);
+          const normalize = text => text.replaceAll(/\s+/g, '.').toLowerCase();
+          const query = normalize(name);
+          const matches = Object.entries(index).filter(([, item]) => normalize(item.name).startsWith(query));
+          const details = await Promise.allSettled(matches.map(([id]) => readJson(`/games/${id}.json`)));
+          if (details.length && details.every(entry => entry.status === 'rejected')) {
+            throw new Error('Cover details unavailable');
+          }
+          const covers = [];
+          for (const entry of details) {
+            if (entry.status !== 'fulfilled') continue;
+            const game = entry.value;
+            const slug = game?.cover?.url?.match(/\/([^/]+)\.[^/.]+$/)?.[1];
+            if (slug) {
+              covers.push({
+                name: game.name,
+                key: `igdb_${game.id}`,
+                url: `https://images.igdb.com/igdb/image/upload/t_cover_big/${slug}.jpg`,
+                saveUrl: `https://images.igdb.com/igdb/image/upload/t_cover_big_2x/${slug}.png`,
+              });
             }
-            return null;
-          }).filter(item => item)))
-            .then(results => results
-              .filter(item => item && item.cover && item.cover.url)
-              .map(game => {
-                const thumb = game.cover.url;
-                const dotIndex = thumb.lastIndexOf('.');
-                const slashIndex = thumb.lastIndexOf('/');
-                if (dotIndex < 0 || slashIndex < 0) {
-                  return null;
-                }
-                const slug = thumb.substring(slashIndex + 1, dotIndex);
-                return {
-                  name: game.name,
-                  key: `igdb_${game.id}`,
-                  url: `https://images.igdb.com/igdb/image/upload/t_cover_big/${slug}.jpg`,
-                  saveUrl: `https://images.igdb.com/igdb/image/upload/t_cover_big_2x/${slug}.png`,
-                }
-              }).filter(item => item));
+          }
+          return covers;
         }
 
-        searchCovers(searchTerm)
-          .then(list => this.coverCandidates = list)
-          .finally(() => this.coverSearching = false);
+        try {
+          const covers = await searchCovers(searchTerm);
+          if (searchId === this.coverSearchId) this.coverCandidates = covers;
+        } catch {
+          if (searchId === this.coverSearchId) this.coverError = this.$t('apps.cover_search_failed');
+        } finally {
+          if (searchId === this.coverSearchId) this.coverSearching = false;
+        }
       },
-      useCover(cover) {
+      async useCover(cover) {
+        if (this.coverFinderBusy) return;
+        const draft = this.editForm;
         this.coverFinderBusy = true;
-        fetch("./api/covers/upload", {
-          method: "POST",
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            key: cover.key,
-            url: cover.saveUrl,
-          })
-        }).then(r => {
-          if (!r.ok) throw new Error("Failed to download covers");
-          return r.json();
-        }).then(body => {
-          this.editForm["image-path"] = body.path;
-          // Close the modal
-          const modalEl = this.$refs.coverFinderModal;
-          if (modalEl) {
-            const modal = Modal.getInstance(modalEl);
-            if (modal) {
-              modal.hide();
-            }
+        this.coverError = null;
+        try {
+          const response = await fetch("./api/covers/upload", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: cover.key, url: cover.saveUrl }),
+            signal: AbortSignal.timeout(15000),
+          });
+          const result = await response.json();
+          if (!response.ok || result?.status !== true || typeof result.path !== 'string' || !result.path.trim()) {
+            throw new Error('Unconfirmed cover');
           }
-        })
-          .finally(() => this.coverFinderBusy = false);
+          if (this.editForm === draft) {
+            draft["image-path"] = result.path;
+            Modal.getInstance(this.$refs.coverFinderModal)?.hide();
+          }
+        } catch {
+          if (this.editForm === draft) this.coverError = this.$t('apps.cover_save_failed');
+        } finally {
+          this.coverFinderBusy = false;
+        }
       },
       save() {
         const draft = { ...this.editForm };

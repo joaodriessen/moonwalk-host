@@ -53,6 +53,8 @@
     "load_failed": "Couldn’t load the application list. Refresh the page to try again.",
     "list_changed": "The application list changed. Copy any edits you want to keep, then refresh the page.",
     "change_unconfirmed": "Couldn’t confirm the application change.",
+    "cover_search_failed": "Couldn’t search for covers. Try the search again.",
+    "cover_save_failed": "Couldn’t confirm the cover was saved. Your previous image is still selected.",
     "cover_search_hint": "Search names should match IGDB naming conventions.",
     "delete": "Delete",
     "detached_cmds": "Detached Commands",

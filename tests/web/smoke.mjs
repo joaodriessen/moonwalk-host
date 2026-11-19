@@ -107,7 +107,8 @@ const server = createServer(async (req, res) => {
     if (!(pages.includes(path) || path.startsWith('/assets/'))) return res.writeHead(404).end();
     const name = pages.includes(path) ? (path === '/' ? 'index' : path.slice(1)) + '.html' : path.slice(1);
     const data = await readFile(join(assets, name));
-    res.writeHead(200, {'Content-Type': contentTypes[extname(name)] || 'application/octet-stream'}).end(data);
+    res.writeHead(200, {'Content-Type': contentTypes[extname(name)] || 'application/octet-stream',
+      'Content-Security-Policy': "img-src 'self' data:"}).end(data);
   } catch {
     res.writeHead(404).end();
   }
@@ -263,6 +264,41 @@ try {
     await until(() => evaluate('Array.from(document.querySelectorAll(".app-initial")).map(el => el.textContent).join("") === "EM"'), 'missing cover fallback');
     await click('Edit');
     assert.equal(await evaluate('document.querySelectorAll(\'label[for="appName"]\').length'), 1);
+    await evaluate(`(() => {
+      const src = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
+      Object.defineProperty(HTMLImageElement.prototype, 'src', {
+        ...src, set(value) {
+          const fixture = 'https://images.igdb.com/igdb/image/upload/t_cover_big/fixture.jpg';
+          src.set.call(this, value === fixture ? 'data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=' : value);
+        }
+      });
+      const fetchPage = window.fetch;
+      window.coverReply = 'offline';
+      window.fetch = (url, options) => {
+        if (String(url).includes('/buckets/')) {
+          if (window.coverReply === 'offline') return Promise.reject(new Error('offline fixture'));
+          return Promise.resolve(Response.json({ '1': { name: 'Example Desktop' } }));
+        }
+        if (String(url).includes('/games/1.json')) {
+          return Promise.resolve(Response.json({id:1, name:'Example Desktop', cover:{url:'https://example.invalid/fixture.jpg'}}));
+        }
+        if (String(url).endsWith('/api/covers/upload')) return Promise.resolve(Response.json(window.coverReply === 'accept'
+          ? {status:true, path:'example-cover.png'} : {status:false}));
+        return fetchPage(url, options);
+      };
+    })()`);
+    await click('Find Cover');
+    await hasText('Couldn’t search for covers');
+    await evaluate("window.coverReply = 'online'");
+    await click('Search...');
+    await until(() => evaluate("!!document.querySelector('.cover-results button')"), 'keyboard-accessible cover');
+    await evaluate("document.querySelector('.cover-results button').click()");
+    await hasText('Couldn’t confirm the cover was saved');
+    assert.equal(await evaluate("document.getElementById('appImagePath').value"), '');
+    await evaluate("window.coverReply = 'accept'; document.querySelector('.cover-results button').click()");
+    await until(() => evaluate("document.getElementById('appImagePath').value === 'example-cover.png'"), 'confirmed cover path');
+    await openPage('/apps');
+    await click('Edit');
     await click('Add Commands');
     await click('Add Detached Command');
     assert.equal(await evaluate(`(() => {
