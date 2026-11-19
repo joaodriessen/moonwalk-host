@@ -17,6 +17,8 @@
   inside the finished DMG.
 - Use the current OpenSSL 3.5 LTS security release and MiniUPnPC 2.3.5. Retry
   interrupted dependency downloads without accepting a partial archive.
+- Make developer build help and argument errors safe to run. Include the
+  display helper and web assets in a fresh developer build.
 
 ## Earlier private alpha builds
 

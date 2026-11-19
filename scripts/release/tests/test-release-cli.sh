@@ -7,6 +7,29 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
+DEV="$WORK/dev"
+mkdir -p "$DEV/macos-dist" "$DEV/scripts" "$DEV/home"
+cp "$REPO/scripts/build-dev.sh" "$DEV/scripts/"
+cp "$REPO/macos-dist/make-bundle.sh" "$REPO/macos-dist/skylight-identity.conf" "$DEV/macos-dist/"
+cat > "$DEV/macos-dist/generate-identity.sh" <<'SH'
+#!/bin/bash
+touch "${DEV_TRIPWIRE:?}"
+exit 88
+SH
+chmod +x "$DEV/macos-dist/generate-identity.sh"
+dev_build() { HOME="$DEV/home" DEV_TRIPWIRE="$WORK/dev-started" "$DEV/scripts/build-dev.sh" "$@"; }
+dev_build --help > "$WORK/out" 2>&1 || fail "developer help attempted a build"
+grep -Fqi usage "$WORK/out" || fail "developer build has no help"
+for invalid in --prefix --prefx; do
+  rc=0
+  dev_build "$invalid" > "$WORK/out" 2>&1 || rc=$?
+  [ "$rc" -eq 64 ] || fail "developer build accepted invalid arguments: $invalid"
+done
+rc=0
+dev_build --prefix "$DEV/out" extra > "$WORK/out" 2>&1 || rc=$?
+[ "$rc" -eq 64 ] || fail "developer build accepted an extra argument"
+[ ! -e "$WORK/dev-started" ] || fail "developer build reached signing with unsupported arguments"
+
 for script in scripts/release.sh scripts/package-release.sh scripts/notarize-release.sh scripts/release/create-dmg.sh scripts/release/verify-artifact.sh; do
   help_output="$("$REPO/$script" --help)"
   grep -Fqi usage <<<"$help_output" || fail "$script has no help"

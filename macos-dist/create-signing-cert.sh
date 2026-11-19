@@ -29,5 +29,5 @@ echo "==> packaging p12 (legacy crypto for macOS security import)…"
   -legacy -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1
 
 echo "==> importing into login keychain (codesign access)…"
-security import "$TMP/cert.p12" -k ~/Library/Keychains/login.keychain-db -P "$P12_PASS" -T /usr/bin/codesign -A
-echo "==> done. First codesign use will prompt once — click 'Always Allow'."
+security import "$TMP/cert.p12" -k ~/Library/Keychains/login.keychain-db -P "$P12_PASS" -T /usr/bin/codesign
+echo "==> done. Your keychain may ask you to authorize codesign."

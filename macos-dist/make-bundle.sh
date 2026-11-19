@@ -16,6 +16,25 @@
 # toolchain for the menu app.
 set -euo pipefail
 
+usage() {
+    echo "Usage: $0 [--prefix DIRECTORY]"
+    echo "With --prefix, assemble the developer app without installing or registering it."
+}
+
+PREFIX=""
+INSTALL=1
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    --help|-h) [ "$#" -eq 1 ] || { usage >&2; exit 64; }; usage; exit 0 ;;
+    --prefix)
+      [ "$#" -eq 2 ] && [ -n "$2" ] || { usage >&2; exit 64; }
+      PREFIX="$2"
+      INSTALL=0
+      ;;
+    *) usage >&2; exit 64 ;;
+  esac
+fi
+
 # Old developer deployment starts the daemon before its menu can migrate settings.
 # Use the current packaged app for this one-time namespace transition.
 if [ -f "$HOME/.config/sunshine/sunshine.conf" ] && [ ! -s "$HOME/.config/skylight/sunshine.conf" ]; then
@@ -24,12 +43,6 @@ if [ -f "$HOME/.config/sunshine/sunshine.conf" ] && [ ! -s "$HOME/.config/skylig
 fi
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/.." && pwd)"
-
-PREFIX=""
-INSTALL=1
-if [ "${1:-}" = "--prefix" ]; then
-  PREFIX="$2"; INSTALL=0
-fi
 
 source "$DIR/skylight-identity.conf"
 [ -f "$DIR/skylight-identity.local.conf" ] && source "$DIR/skylight-identity.local.conf"
@@ -43,7 +56,7 @@ echo "identity: $SKYLIGHT_BUNDLE_ID (cert: $SKYLIGHT_SIGNING_IDENTITY)"
 # 2) Build the daemon
 echo "==> building daemon…"
 cmake -B "$REPO/build" -S "$REPO" -DCMAKE_BUILD_TYPE=Release -DSKYLIGHT_VERSION="$SKYLIGHT_VERSION" >/dev/null
-cmake --build "$REPO/build" --target sunshine -j "$(sysctl -n hw.ncpu)"
+cmake --build "$REPO/build" --target sunshine vd_helper web-ui -j "$(sysctl -n hw.ncpu)"
 
 # 3) Build the menu app (build.sh app-only mode assembles SkylightMenu.app in its build dir)
 echo "==> building menu app…"
@@ -56,7 +69,7 @@ mkdir -p "$APPDIR/Contents/MacOS" "$APPDIR/Contents/Resources" "$APPDIR/Contents
 cp -f "$REPO/sunshine.icns" "$APPDIR/Contents/Resources/sunshine.icns"
 bash "$DIR/compile-app-icon.sh" "$APPDIR"
 cp -f "$REPO/build/sunshine" "$APPDIR/Contents/MacOS/sunshine"
-[ -f "$REPO/build/vd_helper" ] && cp -f "$REPO/build/vd_helper" "$APPDIR/Contents/MacOS/vd_helper"
+cp -f "$REPO/build/vd_helper" "$APPDIR/Contents/MacOS/vd_helper"
 [ -f "$REPO/build/get_display_origin" ] && cp -f "$REPO/build/get_display_origin" "$APPDIR/Contents/MacOS/get_display_origin" || true
 # Daemon runtime assets (web ui / shaders etc. if the build produced them)
 if [ -d "$REPO/build/assets" ]; then cp -R "$REPO/build/assets" "$APPDIR/Contents/Resources/"; fi
