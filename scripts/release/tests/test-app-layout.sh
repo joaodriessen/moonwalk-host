@@ -36,12 +36,10 @@ done
 [ ! -e "$APP/Contents/Resources/assets/Info.plist" ] || fail "dead upstream CPack Info.plist was shipped inside assets"
 [ -d "$APP/Contents/Resources/assets/web" ] || fail "web-ui assets directory is missing"
 [ -f "$APP/Contents/Resources/assets/box.png" ] || fail "app-list icon assets are missing"
-# grep -c (not -q): under this script's pipefail, grep -q exits on first match while
-# strings is still streaming the ~22 MB binary -> SIGPIPE(141) fails the pipeline ON MATCH,
-# making this assertion impossible to pass. -c drains stdin; || true guards the zero-match
-# exit(1) so the numeric check below reports the failure instead of a silent set -e death.
-BAKED_COUNT="$(strings -a "$HELPERS/Skylight" | grep -c "^/Applications/Skylight.app/Contents/Resources/assets" || true)"
-[ "$BAKED_COUNT" -gt 0 ] || fail "daemon does not bake the canonical bundled assets path"
+cmp -s "$APP/Contents/Resources/config_schema.json" "$APP/Contents/Resources/assets/web/config_schema.json" ||
+  fail "native and browser settings schemas differ"
+cmp -s "$APP/Contents/Resources/Defaults/apps.json" "$APP/Contents/Resources/assets/apps.json" ||
+  fail "menu and daemon default application lists differ"
 # The daemon's embedded __info_plist names daemon-triggered macOS permission prompts (local
 # network, firewall). The upstream dev.lizardbyte.sunshine identifier surfaced verbatim in an
 # owner-facing prompt (2026-08-14); the embedded identity must match the codesign identifier.
