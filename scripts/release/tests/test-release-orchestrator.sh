@@ -12,6 +12,7 @@ REPO="$WORK/repo"
 mkdir -p "$REPO/scripts/release" "$REPO/macos-dist" "$REPO/bin"
 SHASUM_DIR="$(dirname "$(command -v shasum)")"
 cp "$SOURCE_REPO/scripts/release.sh" "$REPO/scripts/release.sh"
+cp "$SOURCE_REPO/scripts/release/make-release-receipt.py" "$REPO/scripts/release/make-release-receipt.py"
 cat > "$REPO/macos-dist/skylight-identity.conf" <<'EOF'
 SKYLIGHT_VERSION=9.8.7-test
 SKYLIGHT_BUNDLE_ID=example.skylight
@@ -184,6 +185,23 @@ manifest="$REPO/build/releases/$release_fingerprint/release-manifest.json"
 [ "$(plutil -extract app.notarizationId raw -o - "$manifest")" = fixture-app-submission ] || fail "app notarization is missing"
 [ -f "$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg" ] || fail "conventional DMG was not published"
 [ ! -e "$REPO/build/release/.Moonwalk-Host-9.8.7-test-macOS-arm64.dmg.tmp" ] || fail "publication left a temporary artifact"
+
+image="$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg"
+receipt="$WORK/release-receipt.json"
+python3 "$REPO/scripts/release/make-release-receipt.py" "$manifest" "$image" > "$receipt"
+[ "$(plutil -extract source_commit raw -o - "$receipt")" = "$(git -C "$REPO" rev-parse HEAD)" ] || fail "receipt source revision is wrong"
+[ "$(plutil -extract artifact.sha256 raw -o - "$receipt")" = "$(shasum -a 256 "$image" | awk '{print $1}')" ] || fail "receipt checksum is wrong"
+if grep -Eq 'signing|notarization|fixture-app-submission|fixture-submission|/private/tmp|/Users' "$receipt"; then
+  fail "receipt contains private build metadata"
+fi
+mkdir "$WORK/mixed-candidate"
+altered_image="$WORK/mixed-candidate/$(basename "$image")"
+printf 'unrelated candidate bytes\n' > "$altered_image"
+if python3 "$REPO/scripts/release/make-release-receipt.py" "$manifest" "$altered_image" > "$WORK/bad-receipt.json" 2> "$WORK/out"; then
+  fail "receipt accepted an image from another build"
+fi
+grep -Fq 'checksum differs' "$WORK/out" || fail "receipt mismatch error is unclear"
+[ ! -s "$WORK/bad-receipt.json" ] || fail "failed receipt emitted public metadata"
 
 resume_json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet --resume)"
 [ "$(printf '%s' "$resume_json" | plutil -extract resumed raw -o - -- -)" = true ] || fail "resume was not reported"

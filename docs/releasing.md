@@ -9,6 +9,21 @@ Build from a clean commit with the [release command](BUILDING.md#build-a-tester-
 - Verify private security reporting before publication. Review associated issues, pull requests and attachments for private data. Check anonymous source access after a visibility change.
 - Set the intended version in `macos-dist/skylight-identity.conf` and record the changes. Keep the source commit, checksum, release manifest and verified DMG together. Retain a previously tested signed DMG for rollback.
 
+## Share an installer checksum
+
+Use the release manifest and the exact final DMG to generate a receipt. It
+records the source commit and verifies the image checksum before writing the
+shareable fields. Keep the original manifest and signing logs local.
+
+```sh
+python3 scripts/release/make-release-receipt.py /path/to/release-manifest.json \
+  /path/to/Moonwalk-Host-0.4.0-alpha.16-macOS-arm64.dmg > release-receipt.json
+```
+
+Once the release is approved, attach the receipt next to that DMG. It lists
+the SHA-256 users can compare after downloading. The DMG’s Developer ID
+signature and stapled notarization ticket are checked by the release command.
+
 ## Installer and live qualification
 
 | Exercise | What to verify |
