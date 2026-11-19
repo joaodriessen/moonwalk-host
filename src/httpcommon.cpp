@@ -6,6 +6,7 @@
 
 // standard includes
 #include <filesystem>
+#include <sstream>
 #include <utility>
 
 // lib includes
@@ -41,6 +42,7 @@ namespace http {
   bool user_creds_exist(const std::string &file);
 
   std::string unique_id;
+  std::mutex credential_file_mutex;
   net::net_e origin_web_ui_allowed;
   net::net_e pair_origin_allowed;
 
@@ -69,33 +71,24 @@ namespace http {
   }
 
   int save_user_creds(const std::string &file, const std::string &username, const std::string &password, bool run_our_mouth) {
-    pt::ptree outputTree;
-
-    if (fs::exists(file)) {
-      try {
+    std::lock_guard lock {credential_file_mutex};
+    try {
+      pt::ptree outputTree;
+      if (fs::exists(file)) {
         pt::read_json(file, outputTree);
-      } catch (std::exception &e) {
-        BOOST_LOG(error) << "Couldn't read user credentials: "sv << e.what();
+      }
+      const auto salt = crypto::rand_alphabet(16);
+      outputTree.put("username", username);
+      outputTree.put("salt", salt);
+      outputTree.put("password", util::hex(crypto::hash(password + salt)).to_string());
+      std::ostringstream serialized;
+      pt::write_json(serialized, outputTree);
+      if (!file_handler::write_file_atomic(file.c_str(), serialized.str(), file_handler::file_access::owner_only)) {
+        BOOST_LOG(error) << "Couldn't save Moonwalk Host credentials"sv;
         return -1;
       }
-    }
-
-    auto salt = crypto::rand_alphabet(16);
-    outputTree.put("username", username);
-    outputTree.put("salt", salt);
-    outputTree.put("password", util::hex(crypto::hash(password + salt)).to_string());
-    try {
-      pt::write_json(file, outputTree);
     } catch (std::exception &e) {
-      BOOST_LOG(error) << "error writing to the credentials file, perhaps try this again as an administrator? Details: "sv << e.what();
-      return -1;
-    }
-
-    std::error_code err_code {};
-    fs::permissions(file, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, err_code);
-
-    if (err_code) {
-      BOOST_LOG(error) << "Couldn't change permissions of ["sv << file << "] :"sv << err_code.message();
+      BOOST_LOG(error) << "Couldn't save Moonwalk Host credentials: "sv << e.what();
       return -1;
     }
 
@@ -159,20 +152,18 @@ namespace http {
       return -1;
     }
 
-    if (file_handler::write_file(pkey.c_str(), creds.pkey)) {
-      BOOST_LOG(error) << "Couldn't open ["sv << config::nvhttp.pkey << ']';
-      return -1;
-    }
-
-    if (file_handler::write_file(cert.c_str(), creds.x509)) {
-      BOOST_LOG(error) << "Couldn't open ["sv << config::nvhttp.cert << ']';
-      return -1;
-    }
-
-    fs::permissions(pkey_path, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, err_code);
-
-    if (err_code) {
-      BOOST_LOG(error) << "Couldn't change permissions of ["sv << config::nvhttp.pkey << "] :"sv << err_code.message();
+    const auto write_key = [&] {
+      return file_handler::write_file_atomic(pkey.c_str(), creds.pkey, file_handler::file_access::owner_only);
+    };
+    const auto write_cert = [&] { return file_handler::write_file_atomic(cert.c_str(), creds.x509); };
+    // Write an existing member first. If the second write fails, a file is
+    // still missing and the next start can retry creation of the pair.
+    const bool key_missing = !fs::exists(pkey_path);
+    const bool saved = key_missing && fs::exists(cert_path)
+      ? write_cert() && write_key()
+      : write_key() && write_cert();
+    if (!saved) {
+      BOOST_LOG(error) << "Couldn't save the host's TLS key and certificate"sv;
       return -1;
     }
 

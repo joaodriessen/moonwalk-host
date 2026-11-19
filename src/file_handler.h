@@ -11,6 +11,8 @@
  * @brief Responsible for file handling functions.
  */
 namespace file_handler {
+  enum class file_access { preserve, owner_only };
+
   /**
    * @brief Get the parent directory of a file or directory.
    * @param path The path of the file or directory.
@@ -53,19 +55,16 @@ namespace file_handler {
   int write_file(const char *path, const std::string_view &contents);
 
   /**
-   * @brief Writes a file crash-atomically.
-   * @details Writes `contents` to a temp file in the same directory as `path`, flushes it, then
-   *          `rename()`s it over `path`. The rename is atomic on the same filesystem, so a crash
-   *          or power loss at any point before it either leaves the original file completely
-   *          untouched, or completely replaced -- `path` is never observed truncated or partially
-   *          written. Use this instead of `write_file()` for files that must never be left corrupt
-   *          (e.g. the host's own config), since `write_file()` truncates in place.
+   * @brief Replaces a file without truncating the original.
+   * @details Writes to a temporary file in the same directory and renames it after a successful
+   *          write. With `owner_only`, the temporary file is private before it gets any contents.
    * @param path The path of the file to write.
    * @param contents The contents to write.
+   * @param access Whether to preserve the existing mode or use owner-only access.
    * @return `true` on success, `false` on failure (the original file, if any, is left untouched).
    * @examples
    * bool ok = write_file_atomic("path/to/file", "file contents");
    * @examples_end
    */
-  bool write_file_atomic(const char *path, const std::string_view &contents);
+  bool write_file_atomic(const char *path, const std::string_view &contents, file_access access = file_access::preserve);
 }  // namespace file_handler

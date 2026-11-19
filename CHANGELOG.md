@@ -19,6 +19,8 @@
   interrupted dependency downloads without accepting a partial archive.
 - Make developer build help and argument errors safe to run. Include the
   display helper and web assets in a fresh developer build.
+- Save pairing changes before confirming them. An interrupted write leaves the
+  previous device list intact, and new credential files are private to their owner.
 
 ## Earlier private alpha builds
 

@@ -379,9 +379,10 @@ namespace nvhttp {
 
   /**
    * @brief Remove all paired clients.
+   * @return Whether the new list was saved.
    * @examples
    * nvhttp::erase_all_clients();
    * @examples_end
    */
-  void erase_all_clients();
+  bool erase_all_clients();
 }  // namespace nvhttp

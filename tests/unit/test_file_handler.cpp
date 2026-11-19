@@ -119,6 +119,22 @@ TEST(FileHandlerTests, WriteFileAtomicReplacesExistingContent) {
   std::filesystem::remove(fileName);
 }
 
+#ifndef _WIN32
+TEST(FileHandlerTests, PrivateAtomicWriteCreatesAndReplacesWithOwnerPermissions) {
+  namespace fs = std::filesystem;
+  const std::string file_name = "write_file_atomic_owner_only_test.txt";
+  const auto owner_only = fs::perms::owner_read | fs::perms::owner_write;
+  ASSERT_TRUE(file_handler::write_file_atomic(file_name.c_str(), "original", file_handler::file_access::owner_only));
+  EXPECT_EQ(fs::status(file_name).permissions() & fs::perms::mask, owner_only);
+  fs::permissions(file_name, fs::perms::group_read | fs::perms::others_read, fs::perm_options::add);
+
+  EXPECT_TRUE(file_handler::write_file_atomic(file_name.c_str(), "replacement", file_handler::file_access::owner_only));
+  EXPECT_EQ(fs::status(file_name).permissions() & fs::perms::mask, owner_only);
+  EXPECT_EQ(file_handler::read_file(file_name.c_str()), "replacement");
+  fs::remove(file_name);
+}
+#endif
+
 TEST(FileHandlerTests, WriteFileAtomicDoesNotClobberTargetOnFailure) {
   // Force the rename() step to fail (can't rename a file onto an existing directory) while the
   // temp-file write itself succeeds, and confirm the target is left completely untouched -- the

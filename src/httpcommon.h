@@ -4,6 +4,8 @@
  */
 #pragma once
 
+#include <mutex>
+
 // lib includes
 #include <curl/curl.h>
 
@@ -28,6 +30,8 @@ namespace http {
   std::string url_get_host(const std::string &url);
 
   extern std::string unique_id;
+  // Web credentials and GameStream pairings can share the same state file.
+  extern std::mutex credential_file_mutex;
   extern net::net_e origin_web_ui_allowed;
   extern net::net_e pair_origin_allowed;
 

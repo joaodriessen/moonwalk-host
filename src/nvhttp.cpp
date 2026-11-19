@@ -443,29 +443,12 @@ namespace nvhttp {
   }
 
   client_t client_root;
+  static std::optional<authenticated_device_t> resolve_paired_device(const X509 *certificate, const std::vector<named_cert_t> &devices);
   std::atomic<uint32_t> session_id_counter;
 
-  // Guards `cert_chain` (declared above, file-scope global) and `client_root` together. Both are
-  // touched from (at least) 3 distinct thread contexts with zero prior synchronization: the nvhttp
-  // ssl-server thread's `https_server.verify` lambda (cert_chain.add()/verify() on every TLS
-  // handshake), the confighttp thread (unpair_client()/erase_all_clients()/load_state() erasing
-  // from and reassigning client_root, and clear()+repopulating cert_chain), and the pairing path
-  // (add_authorized_client(), which mutates client_root.named_devices). A concurrent emplace_back
-  // on client_root.named_devices (which can reallocate) racing an in-progress erase() iteration on
-  // another thread is undefined behavior, as is cert_chain.clear()/add() racing a live verify() --
-  // same bug class the `map_id_sess_mutex` fix above closed for map_id_sess, but NOT covered by it.
-  //
-  // Lock ordering: this is a LEAF lock. Nothing done while holding cert_state_mutex (add_cert,
-  // cert_chain::add/clear/verify, client_root reads/writes, save_state(), load_state()) ever
-  // acquires map_id_sess_mutex or any other lock. add_authorized_client() is called from
-  // clientpairingsecret(), itself only ever called on the stack of pair<T>() while
-  // map_id_sess_mutex is already held -- so the only possible nesting order is
-  // map_id_sess_mutex -> cert_state_mutex, never the reverse, which rules out ABBA deadlock.
-  //
-  // save_state() and load_state() are NOT self-locking: they assume the caller already holds
-  // cert_state_mutex (all of their real call sites -- add_authorized_client(), erase_all_clients(),
-  // unpair_client(), and the one-time startup call in start() -- take the lock before calling
-  // them). Do not call either function without holding the lock first.
+  // Guards the paired device list and TLS certificate chain together.
+  // When locks are nested, pairing sessions come first, then this lock,
+  // then the credential file mutex shared with the web settings.
   std::mutex cert_state_mutex;
 
   using args_t = SimpleWeb::CaseInsensitiveMultimap;
@@ -588,51 +571,47 @@ namespace nvhttp {
     return out;
   }
 
-  // Reads `client_root`. Must be called with `cert_state_mutex` already held by the caller --
-  // this function does not lock it itself (see the mutex's declaration comment above).
-  void save_state() {
-    pt::ptree root;
-
-    if (fs::exists(config::nvhttp.file_state)) {
-      try {
-        pt::read_json(config::nvhttp.file_state, root);
-      } catch (std::exception &e) {
-        BOOST_LOG(error) << "Couldn't read "sv << config::nvhttp.file_state << ": "sv << e.what();
-        return;
-      }
-    }
-
-    root.erase("root"s);
-
-    root.put("root.uniqueid", http::unique_id);
-    client_t &client = client_root;
-    pt::ptree node;
-
-    pt::ptree named_cert_nodes;
-    for (auto &named_cert : client.named_devices) {
-      pt::ptree named_cert_node;
-      named_cert_node.put("name"s, named_cert.name);
-      named_cert_node.put("cert"s, named_cert.cert);
-      named_cert_node.put("uuid"s, named_cert.uuid);
-      named_cert_nodes.push_back(std::make_pair(""s, named_cert_node));
-    }
-    root.add_child("root.named_devices"s, named_cert_nodes);
-
+  // Persist the proposed list before changing the active authorization state.
+  // The caller holds cert_state_mutex.
+  bool save_state(const client_t &client) {
+    if (config::sunshine.flags[config::flag::FRESH_STATE]) return true;
+    std::lock_guard file_lock {http::credential_file_mutex};
     try {
-      pt::write_json(config::nvhttp.file_state, root);
+      pt::ptree root;
+      if (fs::exists(config::nvhttp.file_state)) {
+        pt::read_json(config::nvhttp.file_state, root);
+      }
+      root.erase("root"s);
+      root.put("root.uniqueid", http::unique_id);
+      pt::ptree devices;
+      for (const auto &device : client.named_devices) {
+        pt::ptree entry;
+        entry.put("name"s, device.name);
+        entry.put("cert"s, device.cert);
+        entry.put("uuid"s, device.uuid);
+        devices.push_back(std::make_pair(""s, entry));
+      }
+      root.add_child("root.named_devices"s, devices);
+      std::ostringstream serialized;
+      pt::write_json(serialized, root);
+      if (file_handler::write_file_atomic(config::nvhttp.file_state.c_str(), serialized.str(), file_handler::file_access::owner_only)) {
+        return true;
+      }
     } catch (std::exception &e) {
-      BOOST_LOG(error) << "Couldn't write "sv << config::nvhttp.file_state << ": "sv << e.what();
-      return;
+      BOOST_LOG(error) << "Couldn't save paired devices: "sv << e.what();
+      return false;
     }
+    BOOST_LOG(error) << "Couldn't save paired devices"sv;
+    return false;
+  }
 
-    // sunshine_state.json contains username/salt/password-hash for every named device --
-    // restrict it to owner-only, mirroring the TLS private key permissions set in
-    // httpcommon.cpp (create_creds()/pkey_path).
-    std::error_code err_code {};
-    fs::permissions(config::nvhttp.file_state, fs::perms::owner_read | fs::perms::owner_write, fs::perm_options::replace, err_code);
-    if (err_code) {
-      BOOST_LOG(error) << "Couldn't change permissions of ["sv << config::nvhttp.file_state << "] :"sv << err_code.message();
+  // The caller holds cert_state_mutex.
+  void adopt_client_state(client_t client) {
+    cert_chain.clear();
+    for (const auto &device : client.named_devices) {
+      if (auto cert = crypto::x509(device.cert)) cert_chain.add(std::move(cert));
     }
+    client_root = std::move(client);
   }
 
   // Mutates `cert_chain` and `client_root`. Must be called with `cert_state_mutex` already held
@@ -696,31 +675,24 @@ namespace nvhttp {
       }
     }
 
-    // Empty certificate chain and import certs from file
-    cert_chain.clear();
-    for (auto &named_cert : client.named_devices) {
-      cert_chain.add(crypto::x509(named_cert.cert));
-    }
-
-    client_root = client;
+    adopt_client_state(std::move(client));
   }
 
-  void add_authorized_client(const std::string &name, std::string &&cert) {
+  bool add_authorized_client(const std::string &name, std::string &&cert) {
     named_cert_t named_cert;
     named_cert.name = name;
     named_cert.cert = std::move(cert);
     named_cert.uuid = uuid_util::uuid_t::generate().string();
 
-    // Leaf lock -- see cert_state_mutex's declaration comment. This function is only ever called
-    // (via clientpairingsecret()) on the stack of pair<T>() while map_id_sess_mutex is already
-    // held, so the lock order here is always map_id_sess_mutex -> cert_state_mutex.
+    // Pairing holds map_id_sess_mutex before entering here. Preserve the lock order documented
+    // on cert_state_mutex when saving the shared pairing and Web UI state.
     std::lock_guard<std::mutex> lock(cert_state_mutex);
 
-    client_root.named_devices.emplace_back(named_cert);
-
-    if (!config::sunshine.flags[config::flag::FRESH_STATE]) {
-      save_state();
-    }
+    auto next = client_root;
+    next.named_devices.emplace_back(std::move(named_cert));
+    if (!save_state(next)) return false;
+    client_root = std::move(next);
+    return true;
   }
 
   std::shared_ptr<rtsp_stream::launch_session_t> make_launch_session(bool host_audio, const args_t &args, std::string &validation_error) {
@@ -1026,11 +998,13 @@ namespace nvhttp {
     bool same_hash = hash.size() == sess.clienthash.size() && std::equal(hash.begin(), hash.end(), sess.clienthash.begin());
     auto verify = crypto::verify256(crypto::x509(client.cert), secret, sign);
     if (same_hash && verify) {
+      if (!add_authorized_client(client.name, std::move(client.cert))) {
+        fail_pair(sess, tree, "Could not save the paired device.");
+        tree.put("root.<xmlattr>.status_code", 500);
+        return;
+      }
       tree.put("root.paired", 1);
-      add_cert->raise(crypto::x509(client.cert));
-
-      // The client is now successfully paired and will be authorized to connect
-      add_authorized_client(client.name, std::move(client.cert));
+      add_cert->raise(std::move(x509));
 
       // Fast pairing-outcome observation: a read-only OBSERVATION of the crypto verification
       // decision made just above (`same_hash && verify`) -- does not participate in or alter that
@@ -2615,18 +2589,16 @@ namespace nvhttp {
 
       const char *err_str;
       {
-        // Leaf lock -- see cert_state_mutex's declaration comment. Scoped tightly around the
+        // See cert_state_mutex's declaration comment. Scoped tightly around the
         // add()+verify() sequence only; no network I/O happens under the lock.
         std::lock_guard<std::mutex> lock(cert_state_mutex);
 
         while (add_cert->peek()) {
-          char subject_name[256];
-
           auto cert = add_cert->pop();
-          X509_NAME_oneline(X509_get_subject_name(cert.get()), subject_name, sizeof(subject_name));
-
-          BOOST_LOG(debug) << "Added cert ["sv << subject_name << ']';
-          cert_chain.add(std::move(cert));
+          // A device may have been unpaired before its first TLS request.
+          if (resolve_paired_device(cert.get(), client_root.named_devices)) {
+            cert_chain.add(std::move(cert));
+          }
         }
 
         err_str = cert_chain.verify(x509.get());
@@ -2742,15 +2714,11 @@ namespace nvhttp {
     tcp.join();
   }
 
-  void erase_all_clients() {
-    // Leaf lock -- see cert_state_mutex's declaration comment. Called only from the confighttp
-    // thread, which never holds map_id_sess_mutex, so no ABBA risk here.
+  bool erase_all_clients() {
     std::lock_guard<std::mutex> lock(cert_state_mutex);
-
-    client_t client;
-    client_root = client;
-    cert_chain.clear();
-    save_state();
+    if (!save_state({})) return false;
+    adopt_client_state({});
+    return true;
   }
 
   static std::optional<authenticated_device_t> resolve_paired_device(const X509 *certificate, const std::vector<named_cert_t> &devices) {
@@ -2779,23 +2747,16 @@ namespace nvhttp {
 #endif
 
   bool unpair_client(const std::string_view uuid) {
-    // Leaf lock -- see cert_state_mutex's declaration comment. Called only from the confighttp
-    // thread, which never holds map_id_sess_mutex, so no ABBA risk here. Held across save_state()
-    // + load_state() too, since both assume the lock is already held (see their declarations).
     std::lock_guard<std::mutex> lock(cert_state_mutex);
-
-    bool removed = false;
-    for (auto it = client_root.named_devices.begin(); it != client_root.named_devices.end();) {
-      if ((*it).uuid == uuid) {
-        it = client_root.named_devices.erase(it);
-        removed = true;
-      } else {
-        ++it;
-      }
-    }
-
-    save_state();
-    load_state();
-    return removed;
+    auto next = client_root;
+    auto &devices = next.named_devices;
+    const auto removed = std::remove_if(devices.begin(), devices.end(), [uuid](const auto &device) {
+      return device.uuid == uuid;
+    });
+    if (removed == devices.end()) return false;
+    devices.erase(removed, devices.end());
+    if (!save_state(next)) return false;
+    adopt_client_state(std::move(next));
+    return true;
   }
 }  // namespace nvhttp

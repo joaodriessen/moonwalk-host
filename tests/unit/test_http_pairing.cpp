@@ -5,7 +5,17 @@
 
 #include "../tests_common.h"
 
+#include <chrono>
+#include <filesystem>
+#include <nlohmann/json.hpp>
+#include <src/config.h>
+#include <src/file_handler.h>
 #include <src/nvhttp.h>
+#include <src/utility.h>
+
+namespace nvhttp {
+  bool add_authorized_client(const std::string &name, std::string &&cert);
+}
 
 #ifdef __APPLE__
   #include <src/platform/macos/xpc_control.h>
@@ -116,6 +126,11 @@ TEST_P(PairingTest, Run) {
   // phase 4
   auto input_client_cert = input.session->client.cert;  // Will be moved
   auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
+  const bool was_fresh = config::sunshine.flags[config::flag::FRESH_STATE];
+  config::sunshine.flags.set(config::flag::FRESH_STATE);
+  const auto restore_fresh = util::fail_guard([&] {
+    config::sunshine.flags.set(config::flag::FRESH_STATE, was_fresh);
+  });
 #ifdef __APPLE__
   // The unit-test process has no launchd-vended, signature-validated menu peer. Authorize only
   // cases intended to reach the successful certificate path, then restore the closed gate before
@@ -141,6 +156,47 @@ TEST_P(PairingTest, Run) {
 
     ASSERT_EQ(std::string(added_subject_name), std::string(original_suject_name));
   }
+}
+
+TEST(PairingPersistenceTest, FailedWritesLeaveAuthorizationAndSharedStateIntact) {
+  namespace fs = std::filesystem;
+  const auto state_dir = fs::path(testing::TempDir()) /
+    ("moonwalk-pairing-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  ASSERT_TRUE(fs::create_directory(state_dir));
+  const auto original_path = config::nvhttp.file_state;
+  const bool was_fresh = config::sunshine.flags[config::flag::FRESH_STATE];
+  const auto state = (state_dir / "state.json").string();
+  std::string paired_uuid;
+  const auto cleanup = util::fail_guard([&] {
+    config::nvhttp.file_state = state;
+    if (!paired_uuid.empty()) unpair_client(paired_uuid);
+    config::nvhttp.file_state = original_path;
+    config::sunshine.flags.set(config::flag::FRESH_STATE, was_fresh);
+    std::error_code error;
+    fs::remove_all(state_dir, error);
+  });
+  config::sunshine.flags.reset(config::flag::FRESH_STATE);
+  config::nvhttp.file_state = state;
+  ASSERT_EQ(file_handler::write_file(state.c_str(), R"({"username":"Example Admin"})"), 0);
+  const auto previous = get_all_clients();
+  ASSERT_TRUE(add_authorized_client("Example Client", std::string {PUBLIC_CERT}));
+  const auto paired = get_all_clients();
+  ASSERT_EQ(paired.back().at("name"), "Example Client");
+  paired_uuid = paired.back().at("uuid").get<std::string>();
+  const auto persisted = file_handler::read_file(state.c_str());
+  EXPECT_EQ(nlohmann::json::parse(persisted).at("username"), "Example Admin");
+
+  config::nvhttp.file_state = (state_dir / "missing" / "state.json").string();
+  EXPECT_FALSE(add_authorized_client("Another Client", std::string {PUBLIC_CERT}));
+  EXPECT_FALSE(unpair_client(paired_uuid));
+  EXPECT_FALSE(erase_all_clients());
+  EXPECT_EQ(get_all_clients(), paired);
+  EXPECT_EQ(file_handler::read_file(state.c_str()), persisted);
+
+  config::nvhttp.file_state = state;
+  EXPECT_TRUE(unpair_client(paired_uuid));
+  EXPECT_EQ(get_all_clients(), previous);
+  EXPECT_EQ(nlohmann::json::parse(file_handler::read_file(state.c_str())).at("username"), "Example Admin");
 }
 
 INSTANTIATE_TEST_SUITE_P(

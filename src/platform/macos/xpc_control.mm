@@ -1560,7 +1560,7 @@ namespace {
   if (ok) {
     BOOST_LOG(info) << "xpc_control: unpaired client "sv << uuidStr << " via XPC"sv;
   } else {
-    BOOST_LOG(warning) << "xpc_control: unpairClient found no matching paired client for uuid "sv << uuidStr;
+    BOOST_LOG(warning) << "xpc_control: could not unpair client "sv << uuidStr;
   }
   reply(ok ? YES : NO);
 }
@@ -1572,7 +1572,10 @@ namespace {
   // every client while a session is live would otherwise leave a now-untrusted client streaming.
   // Callers (the Settings window's confirm dialog) MUST warn the operator about this before
   // invoking this method.
-  nvhttp::erase_all_clients();
+  if (!nvhttp::erase_all_clients()) {
+    reply(NO);
+    return;
+  }
   proc::proc.terminate();
   BOOST_LOG(info) << "xpc_control: unpaired all clients via XPC (active session, if any, terminated)"sv;
   reply(YES);

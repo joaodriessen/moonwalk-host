@@ -1329,11 +1329,10 @@ namespace confighttp {
 
     print_req(request);
 
-    nvhttp::erase_all_clients();
-    proc::proc.terminate();
-
+    const bool saved = nvhttp::erase_all_clients();
+    if (saved) proc::proc.terminate();
     nlohmann::json output_tree;
-    output_tree["status"] = true;
+    output_tree["status"] = saved;
     send_response(response, output_tree);
   }
 
@@ -1768,9 +1767,12 @@ namespace confighttp {
           if (newPassword.empty() || newPassword != confirmPassword) {
             errors.emplace_back("Password Mismatch");
           } else {
-            http::save_user_creds(config::sunshine.credentials_file, newUsername, newPassword);
-            http::reload_user_creds(config::sunshine.credentials_file);
-            output_tree["status"] = true;
+            if (http::save_user_creds(config::sunshine.credentials_file, newUsername, newPassword) ||
+                http::reload_user_creds(config::sunshine.credentials_file)) {
+              errors.emplace_back("Could not save Moonwalk Host credentials.");
+            } else {
+              output_tree["status"] = true;
+            }
           }
         } else {
           errors.emplace_back("Invalid Current Credentials");

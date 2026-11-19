@@ -5,9 +5,16 @@
 
 // standard includes
 #include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#ifndef _WIN32
+  #include <fcntl.h>
+  #include <sys/stat.h>
+  #include <unistd.h>
+#endif
 
 // local includes
 #include "file_handler.h"
@@ -56,7 +63,28 @@ namespace file_handler {
     return 0;
   }
 
-  bool write_file_atomic(const char *path, const std::string_view &contents) {
+#ifndef _WIN32
+  static bool write_private_temp(std::string &path, std::string_view contents) {
+    const int fd = mkstemp(path.data());
+    if (fd < 0) return false;
+    FILE *file = nullptr;
+    if (fcntl(fd, F_SETFD, FD_CLOEXEC) == 0 && fchmod(fd, S_IRUSR | S_IWUSR) == 0) {
+      file = fdopen(fd, "wb");
+    }
+    bool written = false;
+    if (file) {
+      written = std::fwrite(contents.data(), 1, contents.size(), file) == contents.size() &&
+                std::fflush(file) == 0 && fsync(fd) == 0;
+      written = std::fclose(file) == 0 && written;
+    } else {
+      close(fd);
+    }
+    if (!written) unlink(path.c_str());
+    return written;
+  }
+#endif
+
+  bool write_file_atomic(const char *path, const std::string_view &contents, file_access access) {
     const std::filesystem::path target(path);
     std::error_code status_ec;
     const auto original_status = std::filesystem::status(target, status_ec);
@@ -71,8 +99,17 @@ namespace file_handler {
     // concurrent/reentrant callers writing the same target -- it is not a security boundary.
     const auto now = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto tid = std::hash<std::thread::id> {}(std::this_thread::get_id());
-    const std::string tmp = target.string() + ".tmp." + std::to_string(now) + "." + std::to_string(tid);
+    std::string tmp = target.string() + ".tmp." + std::to_string(now) + "." + std::to_string(tid);
 
+#ifndef _WIN32
+    if (access == file_access::owner_only) {
+      tmp = target.string() + ".tmp.XXXXXX";
+      if (!write_private_temp(tmp, contents)) {
+        BOOST_LOG(warning) << "write_file_atomic: could not write private temporary file for " << target;
+        return false;
+      }
+    } else
+#endif
     {
       std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
       if (!out.is_open()) {
@@ -81,9 +118,12 @@ namespace file_handler {
       }
 
       // Preserve a private config's mode before its contents reach the temporary file.
-      if (preserve_permissions) {
+      if (preserve_permissions || access == file_access::owner_only) {
         std::error_code permission_ec;
-        std::filesystem::permissions(tmp, original_status.permissions(), permission_ec);
+        const auto permissions = access == file_access::owner_only
+          ? std::filesystem::perms::owner_read | std::filesystem::perms::owner_write
+          : original_status.permissions();
+        std::filesystem::permissions(tmp, permissions, permission_ec);
         if (permission_ec) {
           out.close();
           std::error_code rm_ec;
