@@ -328,9 +328,9 @@ TEST_F(ProcPrepCmdTest, UndoRunsOnlyForSucceededCmds) {
   proc::ctx_t ctx;
   ctx.id = "1";
   ctx.name = "TestApp";
+  ctx.working_dir = test_dir.string();
   // First cmd succeeds; its undo touches the marker file.
-  const std::string undo_cmd = "/bin/sh -c \"touch " + marker.string() + "\"";
-  ctx.prep_cmds.emplace_back(std::string {"/usr/bin/true"}, std::string {undo_cmd}, false);
+  ctx.prep_cmds.emplace_back(std::string {"/usr/bin/true"}, std::string {"/usr/bin/touch undo-ran.marker"}, false);
   // Second cmd is the one that fails -- execute() must return before ever appending an undo
   // for this cmd (it has none anyway; the point is the loop never reaches it as "succeeded").
   ctx.prep_cmds.emplace_back(std::string {"/nonexistent-skylight-test/prep.sh"}, false);
