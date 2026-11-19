@@ -7,9 +7,17 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <future>
+#include <string_view>
+#include <thread>
+#include <utility>
+#include <boost/asio/ip/tcp.hpp>
 #include <nlohmann/json.hpp>
+#include <Simple-Web-Server/client_http.hpp>
 #include <src/config.h>
 #include <src/file_handler.h>
+#include <src/listener_readiness.h>
 #include <src/nvhttp.h>
 #include <src/utility.h>
 
@@ -331,10 +339,112 @@ TEST(PairingTest, OutOfOrderCalls) {
 
   // This should work, it's the first time we call it
   sess.async_insert_pin.salt = "ff5dc6eda99339a8a0793e216c4257c4";
-  getservercert(sess, tree, "test");
+  ASSERT_TRUE(getservercert(sess, tree, "1234"));
   ASSERT_TRUE(tree.get<int>("root.paired") == 1);
 
   // Calling it again should fail
-  getservercert(sess, tree, "test");
+  ASSERT_FALSE(getservercert(sess, tree, "1234"));
   ASSERT_FALSE(tree.get<int>("root.paired") == 1);
+}
+
+TEST(PairingTest, RejectsAnIncompleteCertificateRequest) {
+  boost::property_tree::ptree tree;
+  pair_session_t session {};
+  session.async_insert_pin.salt = "short";
+  EXPECT_FALSE(getservercert(session, tree, "0123"));
+  EXPECT_EQ(tree.get<int>("root.paired"), 0);
+  EXPECT_EQ(tree.get<int>("root.<xmlattr>.status_code"), 400);
+}
+
+TEST(PairingTest, AcceptsExactlyFourAsciiDigits) {
+  EXPECT_TRUE(valid_pairing_pin("0123"));
+  EXPECT_FALSE(valid_pairing_pin("123"));
+  EXPECT_FALSE(valid_pairing_pin("01234"));
+  EXPECT_FALSE(valid_pairing_pin("12.3"));
+  EXPECT_FALSE(valid_pairing_pin("\xC2\xB2" "23"));
+}
+
+TEST(PairingTest, HeldHttpRequestGetsItsOwnResult) {
+  namespace fs = std::filesystem;
+  using boost::asio::ip::tcp;
+  using namespace std::chrono_literals;
+
+  auto directory = fs::temp_directory_path() / ("moonwalk-pairing-test-" + crypto::rand_alphabet(10, "0123456789abcdef"));
+  ASSERT_TRUE(fs::create_directory(directory));
+  const auto previous_config = config::sunshine;
+  const auto previous_http = config::nvhttp;
+  auto previous_mail = mail::man;
+  auto restore = util::fail_guard([&] {
+    config::sunshine = previous_config;
+    config::nvhttp = previous_http;
+    mail::man = std::move(previous_mail);
+    std::error_code ignored;
+    fs::remove_all(directory, ignored);
+  });
+  config::sunshine.flags[config::flag::FRESH_STATE] = true;
+  config::sunshine.flags[config::flag::PIN_STDIN] = false;
+  config::sunshine.bind_address = "127.0.0.1";
+  config::sunshine.address_family = "ipv4";
+  config::nvhttp.cert = (directory / "cert.pem").string();
+  config::nvhttp.pkey = (directory / "key.pem").string();
+  std::ofstream(config::nvhttp.cert) << PUBLIC_CERT;
+  std::ofstream(config::nvhttp.pkey) << PRIVATE_KEY;
+  mail::man = std::make_shared<safe::mail_raw_t>();
+
+  boost::asio::io_context io;
+  tcp::acceptor reservation(io, {boost::asio::ip::address_v4::loopback(), 0});
+  const auto port = reservation.local_endpoint().port();
+  ASSERT_GT(port, 1025);
+  config::sunshine.port = port - nvhttp::PORT_HTTP;
+  reservation.close();
+
+  std::thread server(nvhttp::start);
+  auto stop = util::fail_guard([&] {
+    mail::man->event<bool>(mail::shutdown)->raise(true);
+    server.join();
+  });
+  auto await = [](auto ready) {
+    const auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (!ready() && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(10ms);
+    }
+    return ready();
+  };
+  ASSERT_TRUE(await([] { return net::listener_ready(net::listener_kind::http); }));
+  nvhttp::arm_pairing_window();
+
+  auto ask_for_certificate = [&](std::string id, std::string salt) {
+    return std::async(std::launch::async, [&, id = std::move(id), salt = std::move(salt)] {
+      SimpleWeb::Client<SimpleWeb::HTTP> client("127.0.0.1:" + std::to_string(port));
+      client.config.timeout = 3;
+      client.config.timeout_connect = 1;
+      return client.request("GET", "/pair?phrase=getservercert&uniqueid=" + id + "&clientcert=00&salt=" + salt)->content.string();
+    });
+  };
+  auto listed = [](std::string_view id) {
+    const auto pending = nvhttp::list_pending_pair_sessions();
+    return std::any_of(pending.begin(), pending.end(), [&](const auto &entry) { return entry.at("uniqueid") == id; });
+  };
+
+  auto incomplete = ask_for_certificate("fixture-incomplete", "00");
+  ASSERT_TRUE(await([&] { return listed("fixture-incomplete"); }));
+  EXPECT_FALSE(nvhttp::pin("0123", "Example client", "fixture-incomplete"));
+  EXPECT_NE(incomplete.get().find("Salt too short"), std::string::npos);
+  EXPECT_FALSE(listed("fixture-incomplete"));
+  EXPECT_EQ(nvhttp::take_pair_outcome("fixture-incomplete"), std::optional(false));
+
+  auto valid = ask_for_certificate("fixture-valid", "00112233445566778899aabbccddeeff");
+  ASSERT_TRUE(await([&] { return listed("fixture-valid"); }));
+  EXPECT_FALSE(nvhttp::pin("0123", "Example client", ""));
+  EXPECT_TRUE(nvhttp::pin("0123", "Example client", "fixture-valid"));
+  EXPECT_NE(valid.get().find("<paired>1</paired>"), std::string::npos);
+  EXPECT_FALSE(listed("fixture-valid"));
+  EXPECT_FALSE(nvhttp::pin("0123", "Example client", "fixture-valid"));
+
+  SimpleWeb::Client<SimpleWeb::HTTP> client("127.0.0.1:" + std::to_string(port));
+  client.config.timeout = 3;
+  client.config.timeout_connect = 1;
+  const auto abandoned = client.request("GET", "/pair?uniqueid=fixture-valid&serverchallengeresp=00");
+  EXPECT_NE(abandoned->content.string().find("<paired>0</paired>"), std::string::npos);
+  EXPECT_EQ(nvhttp::take_pair_outcome("fixture-valid"), std::optional(false));
 }

@@ -817,8 +817,8 @@ namespace nvhttp {
   }
 
   void remove_session(const pair_session_t &sess) {
-    map_id_sess.erase(sess.client.uniqueID);
     map_id_sess_created_at.erase(sess.client.uniqueID);
+    map_id_sess.erase(sess.client.uniqueID);
   }
 
   void fail_pair(pair_session_t &sess, pt::ptree &tree, const std::string status_msg) {
@@ -826,21 +826,16 @@ namespace nvhttp {
     tree.put("root.<xmlattr>.status_code", 400);
     tree.put("root.<xmlattr>.status_message", status_msg);
 
-    // Fast pairing-outcome observation: record the failure BEFORE remove_session() erases the
-    // session below -- we need sess.client.uniqueID while it's still valid. Safe without any
-    // additional locking: fail_pair() only ever runs on the stack of pair<T>() (see
-    // map_id_sess_mutex's declaration comment), which already holds map_id_sess_mutex for its
-    // entire body -- the SAME lock this write is guarded by, exactly like the existing
-    // map_id_sess/map_id_sess_created_at writes made from this same call chain.
+    // Record the result before removing the session that owns its ID.
     record_pair_outcome_locked(sess.client.uniqueID, false);
 
     remove_session(sess);  // Security measure, delete the session when something went wrong and force a re-pair
   }
 
-  void getservercert(pair_session_t &sess, pt::ptree &tree, const std::string &pin) {
+  bool getservercert(pair_session_t &sess, pt::ptree &tree, const std::string &pin) {
     if (sess.last_phase != PAIR_PHASE::NONE) {
       fail_pair(sess, tree, "Out of order call to getservercert");
-      return;
+      return false;
     }
     sess.last_phase = PAIR_PHASE::GETSERVERCERT;
 
@@ -853,7 +848,7 @@ namespace nvhttp {
 
     if (sess.async_insert_pin.salt.size() < 32) {
       fail_pair(sess, tree, "Salt too short");
-      return;
+      return false;
     }
 
     std::string_view salt_view {sess.async_insert_pin.salt.data(), 32};
@@ -866,6 +861,7 @@ namespace nvhttp {
     tree.put("root.paired", 1);
     tree.put("root.plaincert", util::hex_vec(conf_intern.servercert, true));
     tree.put("root.<xmlattr>.status_code", 200);
+    return true;
   }
 
   void clientchallenge(pair_session_t &sess, pt::ptree &tree, const std::string &challenge) {
@@ -1245,142 +1241,56 @@ namespace nvhttp {
     BOOST_LOG(info) << "nvhttp: pairing window armed for "sv << PAIRING_WINDOW_DURATION.count() << "s"sv;
   }
 
-  bool pin(std::string pin, std::string name, std::string target_uniqueid) {
-    // Same map_id_sess_mutex as pair<T>() -- see its declaration comment. Held for the entire
-    // function body: the prune below, the empty()/find() reads, the nested getservercert() call,
-    // and the sess.client.name assignment all touch the same map-owned pair_session_t.
-    std::lock_guard<std::mutex> lock(map_id_sess_mutex);
+  bool valid_pairing_pin(std::string_view pin) {
+    return pin.size() == 4 && std::all_of(pin.begin(), pin.end(), [](char digit) {
+      return digit >= '0' && digit <= '9';
+    });
+  }
 
-    // Prune stale sessions FIRST -- this was previously missing from pin() (pair<T>() and
-    // has_pending_pair_request() already did it; see PAIRING_SESSION_TTL / prune_stale_pairing_
-    // sessions_locked()'s declaration comments). Otherwise a long-abandoned phantom session could
-    // still be found/counted below even past its TTL.
+  bool pin(std::string pin, std::string name, std::string target_uniqueid) {
+    if (!valid_pairing_pin(pin)) {
+      return false;
+    }
+
+    std::lock_guard<std::mutex> lock(map_id_sess_mutex);
     prune_stale_pairing_sessions_locked();
 
-    pt::ptree tree;
-    if (map_id_sess.empty()) {
-      return false;
-    }
-
-    // ensure pin is 4 digits
-    if (pin.size() != 4) {
-      tree.put("root.paired", 0);
-      tree.put("root.<xmlattr>.status_code", 400);
-      tree.put(
-        "root.<xmlattr>.status_message",
-        std::format("Pin must be 4 digits, {} provided", pin.size())
-      );
-      return false;
-    }
-
-    // ensure all pin characters are numeric
-    if (!std::all_of(pin.begin(), pin.end(), ::isdigit)) {
-      tree.put("root.paired", 0);
-      tree.put("root.<xmlattr>.status_code", 400);
-      tree.put("root.<xmlattr>.status_message", "Pin must be numeric");
-      return false;
-    }
-
-    // SECURITY (S3 pairing-DoS/hijack fix -- supersedes the prior S2 "exactly one pending
-    // session" net). That net had an availability regression: a single unauthenticated
-    // getservercert from ANY LAN peer on the unauthenticated /pair listener, repeated at any
-    // interval under PAIRING_SESSION_TTL, kept map_id_sess.size() >= 2 indefinitely, so this
-    // check refused EVERY genuine pairing attempt from then on (commit 01456adf's regression).
-    // The raw SIZE of map_id_sess is attacker-controlled (anyone can call getservercert); it must
-    // never gate whether the owner can pair.
-    //
-    // The fix: gate on ELIGIBILITY instead of raw size. A session is eligible only if it was
-    // created inside a time window the OWNER armed via an operator-gated surface (see
-    // arm_pairing_window()/window_active_locked()/session_eligible_locked()'s doc comments) --
-    // something an unauthenticated attacker cannot trigger. A background attacker session fired
-    // outside that window is never eligible, however many of them pile up in map_id_sess.
-    auto now = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
     if (!window_active_locked(now)) {
-      BOOST_LOG(warning) << "nvhttp::pin: rejected -- no pairing window is currently armed; "sv
-                             "open \"Pair New Device\" on the host first, then enter the PIN"sv;
+      BOOST_LOG(warning) << "Pairing PIN refused because the pairing window is closed"sv;
       return false;
     }
 
-    // Build the eligible set from the CURRENT armed window. Iterating map_id_sess directly (not
-    // map_id_sess_created_at) so the set only ever contains sessions that are both pending AND
-    // eligible.
-    std::vector<std::string> eligible_ids;
-    for (auto &kv : map_id_sess) {
-      if (session_eligible_locked(kv.first, now)) {
-        eligible_ids.push_back(kv.first);
-      }
-    }
-
-    // SECURITY (judge-found residual hijack, closes design §4's original "sole-eligible-attacker
-    // is impossible" claim which was WRONG): this used to auto-apply the PIN when `eligible_ids.
-    // size() == 1` and no target was given, on the theory that the owner's own device must be the
-    // one eligible session. That theory breaks when the owner's genuine client fired
-    // getservercert MORE than PAIRING_WINDOW_LOOKBACK before the owner actually opens the
-    // pairing UI (arms the window): the genuine session's created_at then falls OUTSIDE the
-    // window's lookback and is NOT eligible, while a LAN attacker whose periodic getservercert
-    // happens to land inside [open-LOOKBACK, open+DURATION] IS eligible -- alone. The owner,
-    // trusting the (correct, still-valid) PIN their own device displayed, would have it silently
-    // applied to the attacker's session. Narrower than the original S2 hijack (needs an
-    // in-window attacker AND a >60s owner delay) but real, and the owner gets no signal
-    // whatsoever that this happened.
-    //
-    // The fix: NEVER auto-apply based on eligible-set size, not even size 1. `target_uniqueid`
-    // is now MANDATORY for the PIN to ever be applied to anything -- the caller (confighttp's
-    // savePin / the XPC/SwiftUI pairing sheet) MUST have the owner explicitly confirm a specific
-    // session (by its unspoofable source_ip, via list_pending_pair_sessions()) before calling
-    // this, even when there is only one eligible candidate to confirm. An empty target refuses
-    // UNCONDITIONALLY here, regardless of how many sessions are eligible -- this is the security
-    // backstop: no explicit owner-confirmed target, no PIN applied, ever.
-    if (target_uniqueid.empty()) {
-      BOOST_LOG(warning) << "nvhttp::pin: rejected -- no target_uniqueid supplied ("sv << eligible_ids.size()
-                          << " session(s) currently eligible); the owner must explicitly confirm "sv
-                             "a specific pending session (by source IP) before a PIN is ever "sv
-                             "applied -- see list_pending_pair_sessions() -- this is refused even "sv
-                             "when exactly one session is eligible"sv;
+    // The owner must select the requesting device, even when it is the only one listed.
+    const auto it = map_id_sess.find(target_uniqueid);
+    if (target_uniqueid.empty() || it == map_id_sess.end() || !session_eligible_locked(target_uniqueid, now)) {
+      BOOST_LOG(warning) << "Pairing PIN refused because the selected request is unavailable"sv;
       return false;
     }
 
-    // An explicit target MUST itself be eligible -- never target an unarmed background phantom,
-    // even if a caller somehow named one. This is the guard that makes Layer B's owner picker
-    // safe: the picker only ever lists eligible sessions (list_pending_pair_sessions()), so a
-    // target that fails this check means the caller was given (or constructed) an id outside
-    // that list.
-    bool is_eligible = std::find(eligible_ids.begin(), eligible_ids.end(), target_uniqueid) != eligible_ids.end();
-    if (!is_eligible) {
-      BOOST_LOG(warning) << "nvhttp::pin: rejected -- target_uniqueid does not match any ELIGIBLE "sv
-                             "pending pairing session (not pending, expired, or outside the armed "sv
-                             "pairing window)"sv;
+    auto &session = it->second;
+    // A failed first phase erases the session. Keep its response alive so the client
+    // receives the result. A repeated submission has no waiting response to answer.
+    auto response = std::move(session.async_insert_pin.response);
+    const bool has_http_response = response.has_left() && response.left();
+    if (!has_http_response && !(response.has_right() && response.right())) {
       return false;
     }
-    auto it = map_id_sess.find(target_uniqueid);
-    if (it == std::end(map_id_sess)) {
-      // Cannot happen (target_uniqueid came from eligible_ids, built from map_id_sess itself
-      // under the same held lock) -- defensive, fail closed rather than dereference.
-      BOOST_LOG(warning) << "nvhttp::pin: rejected -- target_uniqueid vanished from map_id_sess between eligibility check and lookup"sv;
-      return false;
-    }
-    pair_session_t *sess_ptr = &it->second;
-    auto &sess = *sess_ptr;
-    getservercert(sess, tree, pin);
-    sess.client.name = name;
 
-    // response to the request for pin
+    pt::ptree tree;
+    const bool accepted = getservercert(session, tree, pin);
+    if (accepted) {
+      session.client.name = std::move(name);
+    }
+
     std::ostringstream data;
     pt::write_xml(data, tree);
-
-    auto &async_response = sess.async_insert_pin.response;
-    if (async_response.has_left() && async_response.left()) {
-      async_response.left()->write(data.str());
-    } else if (async_response.has_right() && async_response.right()) {
-      async_response.right()->write(data.str());
+    if (has_http_response) {
+      response.left()->write(data.str());
     } else {
-      return false;
+      response.right()->write(data.str());
     }
-
-    // reset async_response
-    async_response = std::decay_t<decltype(async_response.left())>();
-    // response to the current request
-    return true;
+    return accepted;
   }
 
   bool has_pending_pair_request() {
@@ -1543,15 +1453,11 @@ namespace nvhttp {
 
     auto now = std::chrono::steady_clock::now();
 
-    // Collect eligible sessions with their creation time, so the response can be ordered oldest-
-    // first for display -- NOT as a targeting hint (there is deliberately no "pick the first row"
-    // affordance implied by this ordering; selection is always the owner's explicit uniqueid/
-    // source_ip choice). A non-eligible phantom session is filtered out here entirely, so it can
-    // never appear in -- and therefore never be selected from -- the owner's picker.
+    // List requests that still need a PIN, in the order they arrived.
     std::vector<std::pair<std::string, std::chrono::steady_clock::time_point>> eligible;
-    for (auto &kv : map_id_sess) {
-      if (session_eligible_locked(kv.first, now)) {
-        eligible.emplace_back(kv.first, map_id_sess_created_at.at(kv.first));
+    for (const auto &[id, session] : map_id_sess) {
+      if (!session.pin_submitted_at && session_eligible_locked(id, now)) {
+        eligible.emplace_back(id, map_id_sess_created_at.at(id));
       }
     }
     std::sort(eligible.begin(), eligible.end(), [](auto &a, auto &b) {

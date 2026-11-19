@@ -22,6 +22,9 @@
   display helper and web assets in a fresh developer build.
 - Save pairing changes before confirming them. An interrupted write leaves the
   previous device list intact, and new credential files are private to their owner.
+- Keep a pending pairing response alive long enough to report a failed handshake
+  back to the client. The browser confirms when it sends the PIN and lets you try
+  again if the host denies the request or the connection drops.
 - The browser settings report failed unpair requests and let you try again.
   Save and Restart show success after the host acknowledges them. Edits stay
   on the page if saving fails.

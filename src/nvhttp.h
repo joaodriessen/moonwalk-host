@@ -8,6 +8,7 @@
 // standard includes
 #include <optional>
 #include <string>
+#include <string_view>
 
 // lib includes
 #include <boost/property_tree/ptree.hpp>
@@ -173,9 +174,10 @@ namespace nvhttp {
    * PIN and SALT will be used to derive a shared AES key that needs to be stored
    * in order to be used to decrypt_symmetric in the next phases.
    *
-   * At this stage we only have to send back our public certificate.
+   * Returns true once it has prepared the public certificate response.
+   * A failure removes the session through fail_pair().
    */
-  void getservercert(pair_session_t &sess, boost::property_tree::ptree &tree, const std::string &pin);
+  bool getservercert(pair_session_t &sess, boost::property_tree::ptree &tree, const std::string &pin);
 
   /**
    * @brief Pair, phase 2
@@ -237,59 +239,21 @@ namespace nvhttp {
    */
   void arm_pairing_window();
 
-  /**
-   * @brief Accept a user-supplied pin for phase-1 processing (fixed 2026-07-18 -- see
-   * dossier-pairing-bugs.md B / docs/design/design-native-first.md "P.2": the previous wording
-   * below, "compare the user supplied pin to the Moonlight pin," was itself the bug. There is no
-   * separately-known-correct pin the host holds to compare against -- the pin is never
-   * transmitted, hashed or otherwise, by either party (only `salt` crosses the wire, in cleartext
-   * -- see `getservercert()`'s phase-1 doc comment above for the AES key derivation this feeds) --
-   * and this function cannot detect a wrong pin at all; it only derives an AES key from whatever
-   * was typed and reports whether phase 1 itself was allowed to run.
-   * @param pin The user supplied pin.
-   * @param name The user supplied name.
-   * @param target_uniqueid The `uniqueid` of the specific pending pairing session (in
-   * `map_id_sess`) the OWNER explicitly confirmed this PIN is for -- see
-   * `list_pending_pair_sessions()`. **MANDATORY for success**: pass `""` and this call ALWAYS
-   * refuses, regardless of how many sessions are currently eligible (including exactly one) --
-   * see the implementation's comment for why a "sole eligible session" auto-apply shortcut was
-   * removed (a judge-found residual hijack: an owner who arms the window more than
-   * `PAIRING_WINDOW_LOOKBACK` after their own genuine client fired `getservercert` can end up
-   * with an in-window LAN attacker as the sole eligible session instead).
-   * SECURITY (S3 pairing-DoS/hijack fix, hardened): the PIN is applied ONLY to a session that is
-   * BOTH (a) *eligible* -- created within the owner-armed window's envelope (see
-   * `arm_pairing_window()`) -- AND (b) the caller's explicit, non-empty `target_uniqueid`. There
-   * is no code path that applies a PIN without a caller-supplied target, ever -- not for a lone
-   * eligible session, not for any other eligible-set size. The caller (confighttp's `savePin` /
-   * the XPC/SwiftUI pairing sheet) is responsible for having the OWNER explicitly confirm the
-   * target session by its unspoofable `source_ip` (via `list_pending_pair_sessions()`) before
-   * calling this, even when there is only one candidate to confirm -- never auto-select on the
-   * caller's behalf either (never `begin()`/newest/first/sole-eligible -- that IS the hijack this
-   * closes). If no pairing window is currently armed, this always refuses -- "open Pair New
-   * Device on the host first" is the caller-facing framing. See the implementation's comment for
-   * the complete prune -> window-check -> eligibility -> mandatory-target decision tree.
-   * @return `true` iff the pin was ACCEPTED FOR PROCESSING -- i.e. phase 1 (`getservercert`'s AES
-   * key derivation) ran against a target session that was BOTH eligible (armed window) and
-   * explicitly caller-confirmed; `false` if it was rejected before that point (no armed window,
-   * empty `target_uniqueid`, or a `target_uniqueid` that doesn't name a currently-eligible
-   * session -- see implementation comment). **This return value says NOTHING about whether the
-   * pin itself was correct.** `gen_aes_key(salt, pin)` cannot fail on a wrong pin -- it just
-   * derives a different key -- so pin correctness can only be proven later, in phase 4
-   * (`clientpairingsecret()`, after the client completes its own three further round-trips), and
-   * that phase-4 result is reported ONLY to the streaming client over the wire (`root.paired` in
-   * `clientpairingsecret`'s own reply tree) -- never back to this caller. A caller that needs to
-   * know the real pairing outcome must observe it independently, either via `take_pair_outcome()`
-   * (fast -- a read-only notification recorded the instant phase 4 completes, see its doc comment)
-   * or, as the honest ground-truth fallback if that signal is ever missed, the paired-clients list
-   * gaining a new entry -- rather than trust this return value as "paired."
-   * @examples
-   * bool pin_status = nvhttp::pin("1234", "laptop", target_uniqueid);
-   * @examples_end
-   */
-  bool pin(std::string pin, std::string name, std::string target_uniqueid = "");
+  /// The pairing protocol uses a PIN of exactly four ASCII digits.
+  bool valid_pairing_pin(std::string_view pin);
 
   /**
-   * @brief List currently-ELIGIBLE pending pairing sessions (Layer B owner picker).
+   * @brief Send the PIN response to the device the owner selected.
+   * @param pin The four digits shown on the client.
+   * @param name The display name the owner chose for the device.
+   * @param target_uniqueid The pending request selected by the owner in the active pairing window.
+   * @return True when the PIN entered the first phase of the handshake. To check whether pairing
+   * finished, use take_pair_outcome() or check the list of paired devices.
+   */
+  bool pin(std::string pin, std::string name, std::string target_uniqueid);
+
+  /**
+   * @brief List eligible pending requests that still need the owner's PIN.
    *
    * Read-only. Prunes stale sessions first (same `PAIRING_SESSION_TTL` as `has_pending_pair_
    * request()`), then filters to sessions eligible under the CURRENT armed window (see

@@ -449,6 +449,9 @@
     "device_name": "Device Name",
     "pair_failure": "Pairing Failed: Check if the PIN is typed correctly",
     "pair_success": "Success! Please check Moonlight to continue",
+    "pin_rejected": "Couldn’t send the PIN. Start pairing on the other device and select it here again.",
+    "pin_sent": "PIN sent. Check the other device to finish pairing.",
+    "pin_unconfirmed": "Couldn’t confirm that the PIN was sent. Check the other device before you try again.",
     "pin_pairing": "PIN Pairing",
     "send": "Send",
     "warning_msg": "Make sure you have access to the client you are pairing with. This software can give total control to your computer, so be careful!"

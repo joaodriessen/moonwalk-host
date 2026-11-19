@@ -25,6 +25,9 @@ let appTag = '"initial"';
 let acceptAppChanges = false;
 const apps = [{name: 'Example Desktop'}, {name: 'Missing cover', 'image-path': 'missing.png'}];
 const appChanges = [];
+const pairingRequests = [];
+let pendingPairings = [];
+let pairingReply = { status: false };
 const contentTypes = {
   '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
@@ -55,7 +58,19 @@ const server = createServer(async (req, res) => {
       return sendJSON(res, restartReply);
     }
     if (path === '/api/clients/list') return sendJSON(res, { status: true, named_certs: [] });
-    if (path === '/api/pending-pairings') return sendJSON(res, { status: true, pending: [] });
+    if (path === '/api/pending-pairings') return sendJSON(res, { status: true, pending: pendingPairings });
+    if (path === '/api/pin' && req.method === 'POST') {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      pairingRequests.push(JSON.parse(body));
+      await delay(160);
+      if (pairingReply === 'drop') {
+        res.writeHead(200, {'Content-Type': 'application/json', 'Content-Length': '64'}).write('{');
+        await delay(100);
+        return req.socket.destroy();
+      }
+      return sendJSON(res, pairingReply);
+    }
     if (path === '/api/apps' && req.method === 'GET') {
       return sendJSON(res, { apps, env: {} }, 200, {'ETag': appTag, 'Cache-Control': 'no-store'});
     }
@@ -236,9 +251,35 @@ try {
     await until(() => evaluate('document.querySelector(".navbar-brand") && !document.querySelector(\'[aria-label="Delete Example Desktop"]\')'), 'reloaded list after delete');
     assert.equal(appChanges[3].tag, '"changed-before-delete"');
     assert.equal(apps.length, 1);
+
+    pendingPairings = [{ uniqueid: 'example-request', source_ip: '192.0.2.10', age_sec: 1 }];
+    await openPage('/pin');
+    await hasText('192.0.2.10');
+    assert.equal(await evaluate('document.querySelector("#form .btn-primary")?.disabled'), true);
+    await evaluate(`(() => {
+      document.querySelector('.list-group-item').click();
+      for (const [id, value] of [['pin-input', '0123'], ['name-input', 'Example Laptop']]) {
+        const input = document.getElementById(id);
+        input.value = value;
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+      }
+    })()`);
+    await evaluate('document.getElementById("form").requestSubmit(); document.getElementById("form").requestSubmit()');
+    await hasText('Couldn’t send the PIN');
+    assert.deepEqual(pairingRequests, [{ pin:'0123', name:'Example Laptop', uniqueid:'example-request' }]);
+    assert.equal(await evaluate('document.getElementById("pin-input").value'), '0123');
+    pairingReply = 'drop';
+    await click('Send');
+    await hasText('Couldn’t confirm that the PIN was sent');
+    pairingReply = { status: true };
+    await click('Send');
+    await hasText('PIN sent. Check the other device to finish pairing.');
+    assert.equal(await evaluate('document.getElementById("pin-input").value'), '');
+    assert.equal(pairingRequests.length, 3);
     assert.deepEqual(jsErrors, []);
     console.log('Confirmed load failure, functional settings save, edits preserved, correct request body, restart denial, lost response and acknowledgement.');
     console.log('Confirmed cover fallback, draft preservation and application revision checks for both edits and deletion.');
+    console.log('Confirmed explicit device selection, rejected and lost PIN responses, and acknowledgement without claiming pairing is complete.');
   }
 } finally {
   ws?.close();

@@ -1775,11 +1775,12 @@ namespace confighttp {
    * @code{.json}
    * {
    *   "pin": "<pin>",
-   *   "name": "Friendly Client Name"
+   *   "name": "Friendly Client Name",
+   *   "uniqueid": "Selected pending request ID"
    * }
    * @endcode
    *
-   * @api_examples{/api/pin| POST| {"pin":"1234","name":"My PC"}}
+   * @api_examples{/api/pin| POST| {"pin":"1234","name":"My PC","uniqueid":"request-id"}}
    */
   void savePin(resp_https_t response, req_https_t request) {
     if (!check_content_type(response, request, "application/json")) {
@@ -1801,30 +1802,17 @@ namespace confighttp {
       nlohmann::json input_tree = nlohmann::json::parse(ss);
       const std::string name = input_tree.value("name", "");
       const std::string pin = input_tree.value("pin", "");
-      // SECURITY (S3 pairing-DoS/hijack fix, hardened -- see nvhttp.h/.cpp `pin()`):
-      // `nvhttp::pin()` now refuses an empty `target_uniqueid` UNCONDITIONALLY, even when only
-      // one session is eligible (a lone eligible session is not guaranteed to be the owner's --
-      // see that function's doc comment for the residual hijack this closes). `pin.html` fetches
-      // `GET /api/pending-pairings` and requires the owner to explicitly select a row (labeled by
-      // source IP) before it will submit -- see that page's script for the picker -- so this is
-      // the owner-confirmed `uniqueid` in the normal flow. `nvhttp::pin()` re-validates that the
-      // target is itself *eligible* regardless of what this handler sends (a caller cannot bypass
-      // eligibility just by naming a uniqueid). `getPinPage`'s `arm_pairing_window()` call is what
-      // makes the web flow's genuine getservercert eligible in the first place.
       const std::string target_uniqueid = input_tree.value("uniqueid", "");
-
-      int _pin = 0;
-      _pin = std::stoi(pin);
-      if (_pin < 0 || _pin > 9999) {
-        bad_request(response, request, "PIN must be between 0000 and 9999");
+      if (!nvhttp::valid_pairing_pin(pin)) {
+        bad_request(response, request, "Enter exactly four digits for the PIN");
         return;
       }
 
       output_tree["status"] = nvhttp::pin(pin, name, target_uniqueid);
       send_response(response, output_tree);
-    } catch (std::exception &e) {
-      BOOST_LOG(warning) << "SavePin: "sv << e.what();
-      bad_request(response, request, e.what());
+    } catch (const std::exception &) {
+      BOOST_LOG(warning) << "Browser pairing request could not be processed"sv;
+      bad_request(response, request, "Could not process the pairing request");
     }
   }
 

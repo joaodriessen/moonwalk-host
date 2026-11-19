@@ -22,7 +22,6 @@
 // standard includes
 #include <algorithm>
 #include <atomic>
-#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <condition_variable>
@@ -39,6 +38,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 // POSIX includes (NOTE_EXIT watch + liveness probe, docs/design/2026-07-19-daemon-lifecycle-coupling.md §2C/§2D)
@@ -999,23 +999,8 @@ namespace {
 /// 30s-timeout-with-reconcile behavior remains the honest fallback if this signal is ever missed.
 - (void)pairOutcomeForUniqueid:(NSString *)uniqueid withReply:(void (^)(NSNumber * _Nullable outcome))reply;
 
-/// S3 native pairing sheet: drive the SAME pairing path `POST /api/pin` uses
-/// (`src/confighttp.cpp`'s `savePin`, which calls `nvhttp::pin`) -- does NOT reimplement any
-/// pairing crypto. `pin` MUST be exactly 4 numeric digits (checked here BEFORE calling into
-/// `nvhttp::pin` at all) or this rejects without touching any pairing state. `name` labels the
-/// newly paired client -- exactly like the web UI's `pin.html` "device name" field, since
-/// neither the web flow nor this one has any way to know a pending client's real name ahead of
-/// confirmation. `message` is always non-empty and human-readable, for either outcome.
-/// `targetUniqueid` (S3 pairing-DoS/hijack fix, Layer B, hardened): the specific pending
-/// session's `uniqueid` the OWNER explicitly confirmed by tapping its row in
-/// `PairingSheet.swift`'s source-IP list -- **MANDATORY**, not just for disambiguation:
-/// `nvhttp::pin()` refuses an empty target UNCONDITIONALLY, even when only one session is
-/// eligible (a judge-found residual: a lone eligible session is not guaranteed to be the
-/// owner's -- see `nvhttp.h`'s `pin()` doc comment). `PairingSheet.swift` never auto-selects on
-/// the owner's behalf, including the single-candidate case, so this is never `""` on a
-/// successful flow. Threaded straight through to `nvhttp::pin(pin, name, targetUniqueid)`, which
-/// re-validates that the target is itself ELIGIBLE before ever applying the PIN to it -- this
-/// method does not (and must not) special-case or trust the target itself.
+/// Send a PIN to the pending request selected in the pairing sheet. The reply reports
+/// whether the handshake started. Use pairOutcomeForUniqueid to check whether it finished.
 - (void)pair:(NSString *)pin name:(NSString *)name targetUniqueid:(NSString *)targetUniqueid reply:(void (^)(BOOL success, NSString *message))reply;
 
 /// C: the full list of paired clients, as JSON `[{"name": String, "uuid": String}, ...]` --
@@ -1493,48 +1478,16 @@ namespace {
   std::string nameStr = name ? std::string([name UTF8String]) : std::string();
   std::string targetStr = targetUniqueid ? std::string([targetUniqueid UTF8String]) : std::string();
 
-  // SECURITY: reject anything that is not EXACTLY 4 numeric digits before ever calling into
-  // the pairing path -- redundant, defense-in-depth duplicate of the identical check
-  // `nvhttp::pin` itself performs first thing (src/nvhttp.cpp's `pin()`), so a malformed PIN
-  // is refused at this boundary too, not just deeper in.
-  bool isFourDigits = pinStr.size() == 4 &&
-                       std::all_of(pinStr.begin(), pinStr.end(), [](unsigned char c) {
-                         return std::isdigit(c) != 0;
-                       });
-  if (!isFourDigits) {
-    BOOST_LOG(warning) << "xpc_control: rejected pair() -- PIN must be exactly 4 digits"sv;
-    reply(NO, @"PIN must be exactly 4 digits");
+  if (!nvhttp::valid_pairing_pin(pinStr)) {
+    reply(NO, @"Enter exactly four digits for the PIN");
     return;
   }
 
-  // Reuse the SAME pairing path `POST /api/pin` drives: src/confighttp.cpp's `savePin` calls
-  // this exact `nvhttp::pin(pin, name, target_uniqueid)` (src/nvhttp.cpp) -- the one function
-  // that owns the getservercert/challenge/secret exchange with the waiting Moonlight client.
-  // Nothing about that exchange is reimplemented here; this XPC method is a thin, validated
-  // caller of it, exactly like the HTTP handler is.
-  //
-  // SECURITY (S3 pairing-DoS/hijack fix, hardened -- see nvhttp.h/.cpp `pin()`): `targetStr` is
-  // whatever `PairingSheet.swift` sent, which should always be a `uniqueid` the OWNER explicitly
-  // confirmed from `pendingPairingsWithReply:`'s list -- `nvhttp::pin()` now refuses an empty
-  // target UNCONDITIONALLY, even when only one session is eligible, so a client that (incorrectly)
-  // sends `""` simply fails here rather than falling back to any auto-selected session. This
-  // method does NOT itself validate that `targetStr` is eligible -- it doesn't need to and must
-  // not try to duplicate that logic: `nvhttp::pin()` re-derives and re-checks both "is a target
-  // present" and "is the target eligible" from its own armed-window state on every call,
-  // unconditionally, for every caller (there is no "trusted caller" bypass). A forged, stale, or
-  // missing `targetStr` is refused there, not here.
-  bool ok = nvhttp::pin(pinStr, nameStr, targetStr);
-  if (ok) {
-    // `ok == true` here means ONLY that phase-1 getservercert ran and the held response was
-    // written -- i.e. the PIN was accepted into key derivation, which cannot itself fail on a
-    // wrong PIN. It is NOT a pairing success: the client still has to complete phases 2-4, which
-    // it will abort partway through on a wrong PIN (see nvhttp.cpp's HANDSHAKE_TIMEOUT). The real
-    // outcome reaches the menubar via the `pairOutcomeForUniqueid` poll, not this reply.
-    BOOST_LOG(info) << "xpc_control: PIN accepted for \""sv << nameStr << "\" (phase 1) -- awaiting device confirmation via pairOutcome"sv;
+  if (nvhttp::pin(std::move(pinStr), std::move(nameStr), std::move(targetStr))) {
+    BOOST_LOG(info) << "Pairing PIN accepted. Waiting for device confirmation"sv;
     reply(YES, @"PIN accepted, verifying");
   } else {
-    BOOST_LOG(warning) << "xpc_control: pair() rejected by nvhttp::pin (no armed pairing window, no eligible session, an ambiguous multi-eligible set, or an unexpected error)"sv;
-    reply(NO, @"Pairing failed — make sure a Moonlight client is currently showing this PIN, then try again");
+    reply(NO, @"Couldn’t send the PIN. Start pairing on the other device and select it again.");
   }
 }
 

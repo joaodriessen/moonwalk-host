@@ -77,6 +77,8 @@ jobs:
           test -s build/assets/web/index.html
           test -s build/assets/web/config.html
           test -s build/assets/web/pin.html
+      - name: Exercise setup and settings in Firefox
+        run: node tests/web/smoke.mjs
 
   daemon-build:
     name: Build and test the host daemon
