@@ -13,8 +13,9 @@ LIVE_BITRATE_PATCH_SHA256=feab50d9b6fae9ff11b5ebb0c8233f60425fec7c33099fc9671505
 ROOT="$REPO/build/ffmpeg-release"
 SOURCE="$ROOT/ffmpeg-$VERSION"
 PREFIX="$ROOT/prepared"
-ARCHIVE="$ROOT/ffmpeg-$VERSION.tar.xz"
-COMPANIONS="$ROOT/Darwin-arm64-ffmpeg.tar.gz"
+DOWNLOADS="$REPO/build/release-deps/ffmpeg-downloads"
+ARCHIVE="$DOWNLOADS/ffmpeg-$VERSION.tar.xz"
+COMPANIONS="$DOWNLOADS/Darwin-arm64-ffmpeg-$COMPANION_TAG.tar.gz"
 PATCH="$REPO/patches/ffmpeg-vtenc-sync-output.patch"
 COMPLETION_PATCH="$REPO/patches/ffmpeg-vtenc-completion.patch"
 LIVE_BITRATE_PATCH="$REPO/patches/ffmpeg-vtenc-live-bitrate.patch"
@@ -22,11 +23,25 @@ JOBS="${SKYLIGHT_BUILD_JOBS:-6}"
 
 sha() { shasum -a 256 "$1" | awk '{print $1}'; }
 verify() { [ -f "$2" ] && [ "$(sha "$2")" = "$1" ] || { echo "ERROR: checksum mismatch: $2" >&2; exit 1; }; }
+prepared_manifest() {
+  local sdk compiler library digest
+  sdk="$(xcrun --sdk macosx --show-sdk-build-version)" || return 1
+  compiler="$(/usr/bin/clang --version | shasum -a 256 | awk '{print $1}')" || return 1
+  printf 'version=%s source=%s patch=%s completion_patch=%s live_bitrate_patch=%s companion=%s recipe=%s sdk=%s compiler=%s\n' \
+    "$VERSION" "$SOURCE_SHA256" "$PATCH_SHA256" "$COMPLETION_PATCH_SHA256" "$LIVE_BITRATE_PATCH_SHA256" \
+    "$COMPANION_SHA256" "$(sha "$0")" "$sdk" "$compiler"
+  for library in libavcodec.a libavutil.a libswscale.a libcbs.a libx264.a libx265.a libSvtAv1Enc.a; do
+    digest="$(sha "$PREFIX/lib/$library")" || return 1
+    printf '%s=%s\n' "$library" "$digest"
+  done
+}
 verify_prepared() {
   local recorded="$PREFIX/.skylight-ffmpeg"
+  local expected
   [ -f "$recorded" ] || return 1
-  [ "$(cat "$recorded")" = "version=$VERSION source=$SOURCE_SHA256 patch=$PATCH_SHA256 completion_patch=$COMPLETION_PATCH_SHA256 live_bitrate_patch=$LIVE_BITRATE_PATCH_SHA256 companion=$COMPANION_SHA256 recipe=$(sha "$0") libavcodec=$(sha "$PREFIX/lib/libavcodec.a")" ] || return 1
-  [ -f "$PREFIX/include/libavcodec/avcodec.h" ] && [ -f "$PREFIX/lib/libcbs.a" ]
+  [ -s "$PREFIX/include/libavcodec/avcodec.h" ] || return 1
+  expected="$(prepared_manifest 2>/dev/null)" || return 1
+  [ "$(cat "$recorded")" = "$expected" ]
 }
 
 case "${1:-}" in
@@ -43,18 +58,19 @@ verify "$COMPLETION_PATCH_SHA256" "$COMPLETION_PATCH"
 verify "$LIVE_BITRATE_PATCH_SHA256" "$LIVE_BITRATE_PATCH"
 if verify_prepared; then echo "Prepared FFmpeg $VERSION: $PREFIX"; exit 0; fi
 PKG_CONFIG="$(command -v pkg-config)" || { echo "ERROR: pkg-config is required to build FFmpeg" >&2; exit 1; }
-mkdir -p "$ROOT"
+mkdir -p "$ROOT" "$DOWNLOADS"
 release_fetch_archive "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz" "$ARCHIVE" "$SOURCE_SHA256"
 release_fetch_archive "https://github.com/LizardByte/build-deps/releases/download/$COMPANION_TAG/Darwin-arm64-ffmpeg.tar.gz" \
   "$COMPANIONS" "$COMPANION_SHA256"
-if [ ! -f "$ROOT/companion/.archive-complete" ]; then
-  mkdir -p "$ROOT/companion"
-  tar -xf "$COMPANIONS" -C "$ROOT/companion"
-  touch "$ROOT/companion/.archive-complete"
+COMPANION_ROOT="$ROOT/companion-$COMPANION_SHA256"
+if [ ! -f "$COMPANION_ROOT/.archive-complete" ]; then
+  mkdir -p "$COMPANION_ROOT"
+  tar -xf "$COMPANIONS" -C "$COMPANION_ROOT"
+  touch "$COMPANION_ROOT/.archive-complete"
 fi
-COMPANION="$ROOT/companion/ffmpeg"
+COMPANION="$COMPANION_ROOT/ffmpeg"
 for lib in libSvtAv1Enc.a libx264.a libx265.a; do [ -f "$COMPANION/lib/$lib" ] || { echo "ERROR: companion library missing: $lib" >&2; exit 1; }; done
-PATCH_SET="$PATCH_SHA256:$COMPLETION_PATCH_SHA256:$LIVE_BITRATE_PATCH_SHA256"
+PATCH_SET="$SOURCE_SHA256:$PATCH_SHA256:$COMPLETION_PATCH_SHA256:$LIVE_BITRATE_PATCH_SHA256"
 if [ ! -f "$SOURCE/.skylight-patched" ] ||
    [ "$(cat "$SOURCE/.skylight-patched")" != "$PATCH_SET" ]; then
   rm -rf "$SOURCE"
@@ -108,6 +124,7 @@ find "$SOURCE/libavcodec" -maxdepth 1 \( -name 'cbs*.o' -o -name 'h264_levels.o'
 /usr/bin/ranlib "$PREFIX/lib/libcbs.a"
 [ "$(strings "$PREFIX/lib/libavcodec.a" | grep -c 'Change the target bitrate of a running session')" -ge 1 ] || { echo "ERROR: live_bitrate option absent from FFmpeg library" >&2; exit 1; }
 [ "$(strings "$PREFIX/lib/libavcodec.a" | grep -c 'Block each encode call until VideoToolbox')" -ge 1 ] || { echo "ERROR: sync_output option absent from FFmpeg library" >&2; exit 1; }
-echo "version=$VERSION source=$SOURCE_SHA256 patch=$PATCH_SHA256 completion_patch=$COMPLETION_PATCH_SHA256 live_bitrate_patch=$LIVE_BITRATE_PATCH_SHA256 companion=$COMPANION_SHA256 recipe=$(sha "$0") libavcodec=$(sha "$PREFIX/lib/libavcodec.a")" > "$PREFIX/.skylight-ffmpeg"
+prepared_manifest > "$PREFIX/.skylight-ffmpeg.tmp"
+mv "$PREFIX/.skylight-ffmpeg.tmp" "$PREFIX/.skylight-ffmpeg"
 verify_prepared || { echo "ERROR: prepared FFmpeg verification failed" >&2; exit 1; }
 echo "Prepared FFmpeg $VERSION: $PREFIX"
