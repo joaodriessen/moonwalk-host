@@ -7,6 +7,8 @@ Moonlight clients can also pair and stream the Mac's desktop.
 The macOS app runs in the menu bar. It manages the streaming service,
 pairing, permissions, and display settings from the logged-in user session.
 
+![Moonwalk Host Settings on macOS, showing an example Linux session and permission status](docs/assets/host-settings.png)
+
 ## Installation
 
 Moonwalk Host is in alpha. It requires Apple Silicon and macOS 14 or later.
