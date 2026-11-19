@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$TEST_DIR/../../.." && pwd)"
+REPO="$(cd "$TEST_DIR/../../.." && pwd -P)"
 SCRIPT="$REPO/scripts/release/build-dependencies.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -45,6 +45,22 @@ root_before="$("$FIXTURE/build-dependencies.sh" --print-root)"
 printf '\n# recipe mutation\n' >> "$FIXTURE/build-dependencies.sh"
 root_after="$("$FIXTURE/build-dependencies.sh" --print-root)"
 [ "$root_before" != "$root_after" ] || fail "dependency recipe change did not invalidate the cache"
+
+mkdir "$WORK/shared dependencies"
+shared="$(cd "$WORK/shared dependencies" && pwd -P)"
+for snapshot in "$WORK/snapshot 1" "$WORK/snapshot 2"; do
+  mkdir -p "$snapshot/scripts/release" "$snapshot/build"
+  cp "$SCRIPT" "$REPO/scripts/release/build-ffmpeg.sh" "$REPO/scripts/release/common.sh" "$snapshot/scripts/release/"
+  ln -s "$shared" "$snapshot/build/release-deps"
+done
+first_root="$("$WORK/snapshot 1/scripts/release/build-dependencies.sh" --print-root)"
+rm -r "$WORK/snapshot 1"
+second_root="$("$WORK/snapshot 2/scripts/release/build-dependencies.sh" --print-root)"
+[ "$first_root" = "$second_root" ] || fail "changing snapshots changed the dependency cache prefix"
+case "$second_root" in
+  "$shared/"*) ;;
+  *) fail "dependency cache metadata points into a disposable snapshot" ;;
+esac
 
 (
   source "$REPO/scripts/release/common.sh"

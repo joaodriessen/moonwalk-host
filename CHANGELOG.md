@@ -6,6 +6,7 @@
 - Rewrote the install and troubleshooting guides, updated the Moonwalk preview, and added a release checklist for testing on real Macs.
 - Added a repository privacy check and updated Apple Silicon CI.
 - Fixed clean builds of the signed installer when the shared dependency cache is empty.
+- Keep cached native library paths valid after removing a finished build's source snapshot.
 - Updated the optional web settings dependencies and removed the unused Codecov plugin.
 - Pointed the web settings page to Moonwalk Host releases and source instead of
   offering unrelated Sunshine updates.

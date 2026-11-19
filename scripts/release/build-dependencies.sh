@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$DIR/../.." && pwd)"
+REPO="$(cd "$DIR/../.." && pwd -P)"
 source "$DIR/common.sh"
 DEPLOYMENT_TARGET="14.0"
 OPENSSL_VERSION="3.5.9"
@@ -34,7 +34,12 @@ CACHE_KEY="$(
     "$XCODE_VERSION" "$SDK_VERSION" "$RECIPE_SHA"
 )"
 CACHE_KEY="$(printf '%s' "$CACHE_KEY" | shasum -a 256 | awk '{print $1}')"
-ROOT="${SKYLIGHT_RELEASE_DEPS_ROOT:-$REPO/build/release-deps/$CACHE_KEY}"
+CACHE_DIR="$REPO/build/release-deps"
+if [ -d "$CACHE_DIR" ]; then
+  # Installed pkg-config files must point to the shared cache after a source snapshot is removed.
+  CACHE_DIR="$(cd "$CACHE_DIR" && pwd -P)"
+fi
+ROOT="${SKYLIGHT_RELEASE_DEPS_ROOT:-$CACHE_DIR/$CACHE_KEY}"
 DOWNLOADS="$ROOT/downloads"
 SOURCES="$ROOT/sources"
 BUILDS="$ROOT/builds"
