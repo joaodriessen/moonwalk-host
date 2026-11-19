@@ -8,16 +8,14 @@ trap 'rm -rf "$WORK"' EXIT
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
 DEV="$WORK/dev"
-mkdir -p "$DEV/macos-dist" "$DEV/scripts" "$DEV/home"
+mkdir -p "$DEV/scripts"
 cp "$REPO/scripts/build-dev.sh" "$DEV/scripts/"
-cp "$REPO/macos-dist/make-bundle.sh" "$REPO/macos-dist/skylight-identity.conf" "$DEV/macos-dist/"
-cat > "$DEV/macos-dist/generate-identity.sh" <<'SH'
+cat > "$DEV/scripts/package-release.sh" <<'SH'
 #!/bin/bash
-touch "${DEV_TRIPWIRE:?}"
-exit 88
+printf '%s\n' "$@" > "${DEV_TRIPWIRE:?}"
 SH
-chmod +x "$DEV/macos-dist/generate-identity.sh"
-dev_build() { HOME="$DEV/home" DEV_TRIPWIRE="$WORK/dev-started" "$DEV/scripts/build-dev.sh" "$@"; }
+chmod +x "$DEV/scripts/package-release.sh"
+dev_build() { DEV_TRIPWIRE="$WORK/dev-started" "$DEV/scripts/build-dev.sh" "$@"; }
 dev_build --help > "$WORK/out" 2>&1 || fail "developer help attempted a build"
 grep -Fqi usage "$WORK/out" || fail "developer build has no help"
 for invalid in --prefix --prefx; do
@@ -29,6 +27,14 @@ rc=0
 dev_build --prefix "$DEV/out" extra > "$WORK/out" 2>&1 || rc=$?
 [ "$rc" -eq 64 ] || fail "developer build accepted an extra argument"
 [ ! -e "$WORK/dev-started" ] || fail "developer build reached signing with unsupported arguments"
+dev_build
+grep -Fxq -- '--developer' "$WORK/dev-started" || fail "developer build did not select local signing"
+grep -Fxq "$(cd "$DEV" && pwd -P)/build/dev/Skylight.app" "$WORK/dev-started" || fail "developer app went to the wrong output path"
+if "$REPO/scripts/package-release.sh" --developer --output-app "$REPO/build/release/Skylight.app" \
+  --build-dir "$REPO/build/dev-compile" > "$WORK/out" 2>&1; then
+  fail "developer packaging accepted the release path"
+fi
+grep -Fq 'developer app must stay under build/dev' "$WORK/out" || fail "developer path is not rejected before signing"
 
 for script in scripts/release.sh scripts/package-release.sh scripts/notarize-release.sh scripts/release/create-dmg.sh scripts/release/verify-artifact.sh; do
   help_output="$("$REPO/$script" --help)"

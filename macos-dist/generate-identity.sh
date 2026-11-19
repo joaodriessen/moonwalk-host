@@ -20,19 +20,26 @@ while [ "$#" -gt 0 ]; do
     *) echo "ERROR: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
-case "$MODE" in local|release) ;; *) echo "ERROR: --mode must be local or release" >&2; exit 64 ;; esac
+case "$MODE" in local|local-bundle|release) ;; *) echo "ERROR: --mode must be local, local-bundle or release" >&2; exit 64 ;; esac
 
 source "$DIR/skylight-identity.conf"
-[ "$MODE" = "local" ] && [ -f "$DIR/skylight-identity.local.conf" ] && source "$DIR/skylight-identity.local.conf"
+[ "$MODE" != "release" ] && [ -f "$DIR/skylight-identity.local.conf" ] && source "$DIR/skylight-identity.local.conf"
 
-if [ "$MODE" = "local" ]; then
+if [ "$MODE" != "release" ]; then
   IDENTITY="${IDENTITY:-$SKYLIGHT_SIGNING_IDENTITY}"
   CERT_NAME="$IDENTITY" "$DIR/create-signing-cert.sh"
   CERT_SHA1=$(security find-certificate -c "$IDENTITY" -Z \
     "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null | awk '/SHA-1 hash:/ {print tolower($3)}')
   [ -n "$CERT_SHA1" ] || { echo "ERROR: signing certificate '$IDENTITY' was not found" >&2; exit 1; }
-  MENU_REQUIREMENT="identifier \"$SKYLIGHT_MENU_BUNDLE_ID\" and certificate leaf = H\"$CERT_SHA1\""
-  HOST_REQUIREMENT="identifier \"$SKYLIGHT_BUNDLE_ID\" and certificate leaf = H\"$CERT_SHA1\""
+  if [ "$MODE" = "local-bundle" ]; then
+    MENU_BUNDLE_ID="$SKYLIGHT_BUNDLE_ID"
+    HOST_BUNDLE_ID="$SKYLIGHT_HOST_BUNDLE_ID"
+  else
+    MENU_BUNDLE_ID="$SKYLIGHT_MENU_BUNDLE_ID"
+    HOST_BUNDLE_ID="$SKYLIGHT_BUNDLE_ID"
+  fi
+  MENU_REQUIREMENT="identifier \"$MENU_BUNDLE_ID\" and certificate leaf = H\"$CERT_SHA1\""
+  HOST_REQUIREMENT="identifier \"$HOST_BUNDLE_ID\" and certificate leaf = H\"$CERT_SHA1\""
   IDENTITY_NOTE="certificate=$IDENTITY sha1=$CERT_SHA1"
 else
   [ -n "$IDENTITY" ] || { echo "ERROR: release mode requires --identity" >&2; exit 64; }

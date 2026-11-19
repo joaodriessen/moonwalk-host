@@ -42,6 +42,7 @@ verify "$PATCH_SHA256" "$PATCH"
 verify "$COMPLETION_PATCH_SHA256" "$COMPLETION_PATCH"
 verify "$LIVE_BITRATE_PATCH_SHA256" "$LIVE_BITRATE_PATCH"
 if verify_prepared; then echo "Prepared FFmpeg $VERSION: $PREFIX"; exit 0; fi
+PKG_CONFIG="$(command -v pkg-config)" || { echo "ERROR: pkg-config is required to build FFmpeg" >&2; exit 1; }
 mkdir -p "$ROOT"
 release_fetch_archive "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz" "$ARCHIVE" "$SOURCE_SHA256"
 release_fetch_archive "https://github.com/LizardByte/build-deps/releases/download/$COMPANION_TAG/Darwin-arm64-ffmpeg.tar.gz" \
@@ -82,7 +83,7 @@ export MACOSX_DEPLOYMENT_TARGET=14.0
 (
   cd "$SOURCE"
   ./configure --prefix="$PREFIX" --cc=/usr/bin/clang --cxx=/usr/bin/clang++ --ar=/usr/bin/ar --ranlib=/usr/bin/ranlib \
-    --pkg-config=/opt/homebrew/bin/pkg-config --pkg-config-flags=--static \
+    --pkg-config="$PKG_CONFIG" --pkg-config-flags=--static \
     --disable-all --disable-autodetect --disable-iconv --enable-gpl --enable-static --disable-shared \
     --enable-avcodec --enable-avutil --enable-bsfs --enable-swscale \
     --enable-encoder=mpeg2video,h263p --enable-libsvtav1 --enable-encoder=libsvtav1 \

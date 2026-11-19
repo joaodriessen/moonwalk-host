@@ -9,12 +9,12 @@ Pushes to main and manual workflow runs exercise both.
 ```sh
 git clone https://github.com/joaodriessen/moonwalk-host.git
 cd moonwalk-host
-brew install cmake boost pkg-config openssl@3 opus llvm doxygen graphviz node icu4c@78 miniupnpc
+brew install cmake pkg-config node openssl@3
 git config core.hooksPath .githooks
-./scripts/build-dev.sh --prefix "$PWD/build/dev"
+./scripts/build-dev.sh
 ```
 
-The developer script creates a local signing identity in your login Keychain, generates the XPC requirements and assembles `build/dev/Skylight.app`. With `--prefix` it skips installation and service registration. Run it on a development Mac. To reproduce the configure flags used in hosted tests, see [the build workflow](../.github/workflows/build.yml).
+The developer script builds the pinned native dependencies, creates a local signing identity in your login Keychain, and assembles `build/dev/Skylight.app` with the same service layout as the release bundle. It leaves installation and service registration to you. Use a dedicated Mac if you want to run the app from Applications. The developer and release bundles normally share an identity in macOS, and switching signers can require permissions again. See [the build workflow](../.github/workflows/build.yml) for the configuration used in hosted tests.
 
 ## Tests and repository checks
 

@@ -36,6 +36,10 @@ if [ "$1" = "find-identity" ]; then
 EOF
   exit 0
 fi
+if [ "$1" = "find-certificate" ] && [ "$3" = "Example Local Signing" ]; then
+  echo "SHA-1 hash: 1234567890ABCDEF1234567890ABCDEF12345678"
+  exit 0
+fi
 exit 64
 SH
 
@@ -109,6 +113,15 @@ assert_contains "$cpp" 'identifier \"io.github.joaodriessen.skylight\"'
 assert_contains "$swift" 'identifier \"io.github.joaodriessen.skylight.host\"'
 assert_contains "$swift" 'hostExecutableRelativePath = "Contents/Resources/Helpers/Skylight"'
 assert_contains "$swift" 'launchAgentPlistName = "io.github.joaodriessen.skylight.daemon.plist"'
+
+"$REPO/macos-dist/generate-identity.sh" --mode local-bundle --identity "Example Local Signing" \
+  --cpp-output "$CPP_OUT" --swift-output "$SWIFT_OUT"
+assert_contains "$(cat "$CPP_OUT")" 'identifier \"io.github.joaodriessen.skylight\"'
+assert_contains "$(cat "$SWIFT_OUT")" 'identifier \"io.github.joaodriessen.skylight.host\"'
+for generated in "$CPP_OUT" "$SWIFT_OUT"; do
+  assert_contains "$(cat "$generated")" 'certificate leaf = H\"1234567890abcdef1234567890abcdef12345678\"'
+  assert_not_contains "$(cat "$generated")" "anchor apple generic"
+done
 
 require_release_tools
 

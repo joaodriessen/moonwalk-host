@@ -2,26 +2,33 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO="$(cd "$DIR/.." && pwd)"
+REPO="$(cd "$DIR/.." && pwd -P)"
 IDENTITY=""
 JOBS="${SKYLIGHT_BUILD_JOBS:-6}"
 APP=""
 BUILD=""
 WITH_TESTS=0
 WITH_DEVICE_TESTS=0
+DEVELOPER=0
 
 while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --identity|--output-app|--build-dir)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo "ERROR: $1 requires a value" >&2; exit 64; }
+      ;;
+  esac
   case "$1" in
     --identity) IDENTITY="$2"; shift 2 ;;
     --output-app) APP="$2"; shift 2 ;;
     --build-dir) BUILD="$2"; shift 2 ;;
+    --developer) DEVELOPER=1; shift ;;
     --with-tests) WITH_TESTS=1; shift ;;
     --with-device-tests) WITH_TESTS=1; WITH_DEVICE_TESTS=1; shift ;;
-    -h|--help) echo "Usage: $0 --identity ID [--output-app APP] [--build-dir BUILD] [--with-tests | --with-device-tests]"; exit 0 ;;
+    -h|--help) echo "Usage: $0 --identity ID --output-app APP --build-dir BUILD [--with-tests | --with-device-tests]"; echo "       $0 --developer [--identity ID] --output-app APP --build-dir BUILD"; exit 0 ;;
     *) echo "ERROR: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
-[ -n "$IDENTITY" ] || { echo "ERROR: --identity is required; release packaging never uses local signing" >&2; exit 64; }
+[ "$DEVELOPER" -eq 1 ] || [ -n "$IDENTITY" ] || { echo "ERROR: --identity is required for release packaging" >&2; exit 64; }
 [ -n "$APP" ] || { echo "ERROR: --output-app is required" >&2; exit 64; }
 [ -n "$BUILD" ] || { echo "ERROR: --build-dir is required" >&2; exit 64; }
 [ -z "${SKYLIGHT_RELEASE_DEPS_ROOT:-}" ] || {
@@ -30,9 +37,22 @@ done
 }
 
 source "$REPO/macos-dist/skylight-identity.conf"
+source "$DIR/release/common.sh"
+if [ "$DEVELOPER" -eq 1 ]; then
+  [ ! -f "$REPO/macos-dist/skylight-identity.local.conf" ] || source "$REPO/macos-dist/skylight-identity.local.conf"
+  IDENTITY="${IDENTITY:-$SKYLIGHT_SIGNING_IDENTITY}"
+  case "$APP" in "$REPO/build/dev/Skylight.app") ;; *) echo "ERROR: developer app must stay under build/dev" >&2; exit 64 ;; esac
+  case "$BUILD" in "$REPO/build/dev-compile") ;; *) echo "ERROR: developer build must stay under build/dev-compile" >&2; exit 64 ;; esac
+  for directory in "$REPO/build" "$REPO/build/dev" "$BUILD"; do
+    [ ! -L "$directory" ] || { echo "ERROR: developer output directories cannot be symbolic links" >&2; exit 64; }
+  done
+  require_release_tools
+  "$REPO/macos-dist/generate-identity.sh" --mode local-bundle --identity "$IDENTITY"
+else
+  "$DIR/release/preflight.sh" --identity "$IDENTITY"
+  "$REPO/macos-dist/generate-identity.sh" --mode release --identity "$IDENTITY"
+fi
 SOURCE_REVISION="${COMMIT:-$(git -C "$REPO" rev-parse HEAD 2>/dev/null || printf unknown)}"
-"$DIR/release/preflight.sh" --identity "$IDENTITY"
-"$REPO/macos-dist/generate-identity.sh" --mode release --identity "$IDENTITY"
 DEPS_ROOT="$("$DIR/release/build-dependencies.sh" --print-root)"
 "$DIR/release/build-dependencies.sh"
 "$DIR/release/build-ffmpeg.sh"
@@ -42,6 +62,7 @@ DEPS="$DEPS_ROOT/prefix"
 case "$BUILD" in "$REPO/build/"*) ;; *) echo "ERROR: build directory must stay under $REPO/build" >&2; exit 1 ;; esac
 case "$APP" in
   "$REPO/build/release/Skylight.app"|"$REPO/build/releases/"*/Skylight.app) ;;
+  "$REPO/build/dev/Skylight.app") [ "$DEVELOPER" -eq 1 ] || { echo "ERROR: release output cannot use the developer path" >&2; exit 1; } ;;
   *) echo "ERROR: output app must be a release path under $REPO/build" >&2; exit 1 ;;
 esac
 OUTPUT_APP="$APP"
@@ -182,21 +203,26 @@ plutil -lint "$APP/Contents/Info.plist" "$APP/Contents/Resources/en.lproj/InfoPl
 "$DIR/release/audit-dependencies.sh" "$APP"
 "$DIR/release/tests/test-app-layout.sh" "$APP"
 
-source "$DIR/release/common.sh"
-TEAM_ID="$(release_team_id "$IDENTITY")"
-codesign -s "$IDENTITY" -i "${SKYLIGHT_BUNDLE_ID}.vd_helper" --force --options runtime --timestamp \
+signing_options=(--force --options runtime)
+if [ "$DEVELOPER" -eq 1 ]; then signing_options+=(--timestamp=none); else signing_options+=(--timestamp); fi
+codesign -s "$IDENTITY" -i "${SKYLIGHT_BUNDLE_ID}.vd_helper" "${signing_options[@]}" \
   --entitlements "$REPO/macos-dist/entitlements/release-helper.plist" "$APP/Contents/Resources/Helpers/vd_helper"
-codesign -s "$IDENTITY" -i "$SKYLIGHT_HOST_BUNDLE_ID" --force --options runtime --timestamp \
+codesign -s "$IDENTITY" -i "$SKYLIGHT_HOST_BUNDLE_ID" "${signing_options[@]}" \
   --entitlements "$REPO/macos-dist/entitlements/release-host.plist" "$APP/Contents/Resources/Helpers/Skylight"
-codesign -s "$IDENTITY" -i "$SKYLIGHT_BUNDLE_ID" --force --options runtime --timestamp \
+codesign -s "$IDENTITY" -i "$SKYLIGHT_BUNDLE_ID" "${signing_options[@]}" \
   --entitlements "$REPO/macos-dist/entitlements/release-menu.plist" "$APP/Contents/MacOS/Skylight"
-codesign -s "$IDENTITY" --force --options runtime --timestamp \
+codesign -s "$IDENTITY" "${signing_options[@]}" \
   --entitlements "$REPO/macos-dist/entitlements/release-menu.plist" "$APP"
-"$DIR/release/audit-signing.sh" --team-id "$TEAM_ID" "$APP"
+if [ "$DEVELOPER" -eq 1 ]; then
+  codesign --verify --deep --strict "$APP"
+else
+  "$DIR/release/audit-signing.sh" --team-id "$(release_team_id "$IDENTITY")" "$APP"
+fi
 
 if [ -e "$OUTPUT_APP" ]; then
   case "$OUTPUT_APP" in
     "$REPO/build/release/Skylight.app"|"$REPO/build/releases/"*/Skylight.app) rm -rf "$OUTPUT_APP" ;;
+    "$REPO/build/dev/Skylight.app") [ "$DEVELOPER" -eq 1 ] && rm -rf "$OUTPUT_APP" ;;
     *) exit 1 ;;
   esac
 fi
