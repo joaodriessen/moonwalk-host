@@ -46,7 +46,7 @@ grep -Fq -- '--identity is required' "$WORK/out" || fail "missing identity error
 if "$REPO/scripts/notarize-release.sh" --identity test >"$WORK/out" 2>&1; then fail "notarize accepted no profile"; fi
 grep -Fq -- '--notary-profile is required' "$WORK/out" || fail "missing profile error is unclear"
 
-package_help="$($REPO/scripts/package-release.sh --help)"
+package_help="$("$REPO/scripts/package-release.sh" --help)"
 for option in --output-app --build-dir --with-tests; do
   [[ "$package_help" == *"$option"* ]] || fail "package help omits $option"
 done

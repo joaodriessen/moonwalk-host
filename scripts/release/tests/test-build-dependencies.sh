@@ -8,7 +8,7 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-manifest="$($SCRIPT --print-manifest)"
+manifest="$("$SCRIPT" --print-manifest)"
 
 for expected in \
   'deployment_target=14.0' \
@@ -27,12 +27,12 @@ grep -Fq 'checksum mismatch' "$WORK/out" || fail "checksum failure was not actio
 actual="$(shasum -a 256 "$WORK/archive" | awk '{print $1}')"
 "$SCRIPT" --verify-file "$actual" "$WORK/archive"
 
-cmake_args="$($SCRIPT --print-cmake-args)"
+cmake_args="$("$SCRIPT" --print-cmake-args)"
 for required_arg in OPENSSL_CRYPTO_LIBRARY OPENSSL_SSL_LIBRARY OPENSSL_INCLUDE_DIR; do
   [[ "$cmake_args" == *"-D$required_arg="* ]] || fail "release CMake args do not pin $required_arg"
 done
 
-cache_root="$($SCRIPT --print-root)"
+cache_root="$("$SCRIPT" --print-root)"
 case "$cache_root" in
   "$REPO/build/release-deps/"????????????????????????????????????????????????????????????????) ;;
   *) fail "dependency cache root is not content-addressed: $cache_root" ;;

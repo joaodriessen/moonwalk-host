@@ -135,15 +135,27 @@ OPUS_ARCHIVE="$(fetch_archive "opus-${OPUS_VERSION}.tar.gz" "$OPUS_URL" "$OPUS_S
 OPUS_SOURCE="$SOURCES/opus-${OPUS_VERSION}"
 extract_archive "$OPUS_ARCHIVE" "$OPUS_SOURCE"
 if [ ! -f "$PREFIX/.opus-${OPUS_VERSION}-complete" ]; then
-  (
-    cd "$OPUS_SOURCE"
-    CFLAGS="-O2 -mmacosx-version-min=$DEPLOYMENT_TARGET" \
-    CXXFLAGS="-O2 -mmacosx-version-min=$DEPLOYMENT_TARGET" \
-      ./configure --prefix="$PREFIX" --disable-shared --enable-static \
-        --disable-doc --disable-extra-programs
-    make -j "$JOBS"
-    make install
-  )
+  # Opus's libtool installer splits prefixes containing spaces.
+  cmake -S "$OPUS_SOURCE" -B "$BUILDS/opus" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DOPUS_BUILD_SHARED_LIBRARY=OFF \
+    -DOPUS_BUILD_PROGRAMS=OFF \
+    -DOPUS_BUILD_TESTING=OFF
+  cmake --build "$BUILDS/opus" -j "$JOBS"
+  cmake --install "$BUILDS/opus"
+  # The upstream CMake metadata embeds absolute paths in unquoted flags.
+  OPUS_PC="$PREFIX/lib/pkgconfig/opus.pc"
+  sed -e 's|^prefix=.*|prefix=${pcfiledir}/../..|' \
+      -e 's|^exec_prefix=.*|exec_prefix=${prefix}|' \
+      -e 's|^libdir=.*|libdir=${prefix}/lib|' \
+      -e 's|^includedir=.*|includedir=${prefix}/include|' \
+      -e 's|^Libs: .*|Libs: -L${libdir} -lopus|' \
+      -e 's|^Cflags: .*|Cflags: -I${includedir}/opus|' "$OPUS_PC" > "$OPUS_PC.tmp"
+  mv "$OPUS_PC.tmp" "$OPUS_PC"
   touch "$PREFIX/.opus-${OPUS_VERSION}-complete"
 fi
 

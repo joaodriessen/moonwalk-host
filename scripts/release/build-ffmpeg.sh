@@ -79,12 +79,15 @@ if [ ! -f "$SOURCE/.skylight-patched" ] ||
   (cd "$SOURCE" && patch --fuzz=0 -p1 < "$PATCH" && patch --fuzz=0 -p1 < "$COMPLETION_PATCH" && patch --fuzz=0 -p1 < "$LIVE_BITRATE_PATCH")
   echo "$PATCH_SET" > "$SOURCE/.skylight-patched"
 fi
+# FFmpeg's configure and make split paths in compiler flags. Paths relative to
+# SOURCE work even when the checkout path contains spaces.
+COMPANION_BUILD_PATH="../${COMPANION_ROOT##*/}/ffmpeg"
 mkdir -p "$ROOT/pkgconfig" "$PREFIX/lib" "$PREFIX/include"
 for name in x265 SvtAv1Enc; do
-  sed "s|^prefix=.*|prefix=$COMPANION|" "$COMPANION/lib/pkgconfig/$name.pc" > "$ROOT/pkgconfig/$name.pc"
+  sed "s|^prefix=.*|prefix=$COMPANION_BUILD_PATH|" "$COMPANION/lib/pkgconfig/$name.pc" > "$ROOT/pkgconfig/$name.pc"
 done
 cat > "$ROOT/pkgconfig/x264.pc" <<PC
-prefix=$COMPANION
+prefix=$COMPANION_BUILD_PATH
 libdir=\${prefix}/lib
 includedir=\${prefix}/include
 Name: x264
@@ -98,19 +101,28 @@ export PKG_CONFIG_PATH="$ROOT/pkgconfig"
 export MACOSX_DEPLOYMENT_TARGET=14.0
 (
   cd "$SOURCE"
-  ./configure --prefix="$PREFIX" --cc=/usr/bin/clang --cxx=/usr/bin/clang++ --ar=/usr/bin/ar --ranlib=/usr/bin/ranlib \
+  ./configure --prefix="../${PREFIX##*/}" --cc=/usr/bin/clang --cxx=/usr/bin/clang++ --ar=/usr/bin/ar --ranlib=/usr/bin/ranlib \
     --pkg-config="$PKG_CONFIG" --pkg-config-flags=--static \
     --disable-all --disable-autodetect --disable-iconv --enable-gpl --enable-static --disable-shared \
     --enable-avcodec --enable-avutil --enable-bsfs --enable-swscale \
     --enable-encoder=mpeg2video,h263p --enable-libsvtav1 --enable-encoder=libsvtav1 \
     --enable-libx264 --enable-encoder=libx264 --enable-libx265 --enable-encoder=libx265 \
     --enable-encoder=h264_videotoolbox,hevc_videotoolbox --enable-videotoolbox \
-    --extra-cflags="-I$COMPANION/include -mmacosx-version-min=14.0" \
-    --extra-ldflags="-L$COMPANION/lib -mmacosx-version-min=14.0"
+    --extra-cflags="-I$COMPANION_BUILD_PATH/include -mmacosx-version-min=14.0" \
+    --extra-ldflags="-L$COMPANION_BUILD_PATH/lib -mmacosx-version-min=14.0"
   make -j "$JOBS"
   make install
 )
 for lib in libSvtAv1Enc.a libx264.a libx265.a; do cp "$COMPANION/lib/$lib" "$PREFIX/lib/$lib"; done
+# Installed metadata must still work from outside SOURCE. Companion archives now
+# live beside the FFmpeg libraries, so drop their build-only search path.
+for pc in "$PREFIX/lib/pkgconfig/"*.pc; do
+  sed -e 's|^prefix=.*|prefix=${pcfiledir}/../..|' \
+      -e 's|^libdir=.*|libdir=${prefix}/lib|' \
+      -e 's|^includedir=.*|includedir=${prefix}/include|' \
+      -e '/^Libs/s| -L\.\./companion-[a-f0-9]*/ffmpeg/lib||g' "$pc" > "$pc.tmp"
+  mv "$pc.tmp" "$pc"
+done
 # Skylight's CBS wrapper includes FFmpeg private headers. Keep these from the exact source built above.
 for subdir in libavcodec libavutil; do
   (cd "$SOURCE" && find "$subdir" -name '*.h' -print0 | while IFS= read -r -d '' header; do
