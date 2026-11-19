@@ -497,7 +497,7 @@ struct SettingsView: View {
             } header: {
                 Text("Video")
             } footer: {
-                Text("The client negotiates the session codec. Automatic offers every codec this Mac can encode. HEVC/AV1 require that codec on the host and keep H.264 available as a fallback; they do not require HDR. Main10 options additionally require 10-bit support, and unavailable engines can fall back to Automatic. Changes require a restart.")
+                Text("The client chooses from the formats this Mac offers. H.264 stays available as a fallback. Main10 choices need 10-bit support. Restart Moonwalk Host to apply a codec change.")
             }
 
             Section {
@@ -507,12 +507,12 @@ struct SettingsView: View {
                             Text("Hardware").tag("videotoolbox")
                             Text("Software").tag("software")
                         }
-                        rowCaption("Hardware uses this Mac’s media engine and is right for almost everyone. Software is CPU-only, far hotter, and for troubleshooting only.")
+                        rowCaption("Hardware uses this Mac’s media engine. Try Software to check whether a problem is specific to hardware encoding.")
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Low-latency encoding", isOn: vtRealtimeBinding)
-                        rowCaption("Prioritizes fast frame delivery over squeezing maximum quality from each bit. Leave on for gaming; turn off only for maximum image quality on a fast local network.")
+                        rowCaption("Favors quicker delivery over compression efficiency. Leave this on if you want the desktop to respond promptly.")
                     }
 
                     if isSoftwareEncoder {
@@ -522,13 +522,13 @@ struct SettingsView: View {
                                     Text(preset.displayLabel).tag(preset)
                                 }
                             }
-                            rowCaption("Faster settings use less CPU; slower settings compress better at the same bitrate. Only applies to the software engine.")
+                            rowCaption("Faster settings use less CPU. Slower settings can retain more detail at the same bitrate.")
                         }
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle("Keep motion smooth when the screen is still", isOn: fpsToggleBinding)
-                        rowCaption("Holds a 30 fps floor during static moments so the picture doesn’t judder when it resumes. Higher floors aren’t offered — above ~30 they fight the capture timing and cause uneven frame pacing.")
+                        rowCaption("Keeps a 30 FPS target when the desktop is still so motion can resume smoothly.")
                     }
                 }
             } footer: {
@@ -574,7 +574,7 @@ struct SettingsView: View {
                     set: { host.setVirtualDisplay($0) }
                 ))
             } footer: {
-                Text("Creates a dedicated virtual screen for each connection instead of mirroring this Mac’s physical display. Best for headless or dedicated-streaming setups.")
+                Text("Asks macOS for a separate screen at the client’s requested size. Turn this off to share an existing display.")
             }
 
             Section {
@@ -603,7 +603,7 @@ struct SettingsView: View {
 
                 }
             } footer: {
-                Text("The client chooses the virtual display’s resolution and refresh rate. Capture display changes take effect after Moonwalk Host restarts; changing physical display modes or HDR is not supported here.")
+                Text("The client requests the virtual display’s size and refresh rate. Restart Moonwalk Host after choosing a different capture display.")
             }
         }
     }

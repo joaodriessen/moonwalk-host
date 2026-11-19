@@ -34,7 +34,7 @@ struct ConnectionHandoffView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let info = host.connectionInfo {
-                Label(info.ready ? "Streaming listeners are ready on this Mac" : "Some streaming listeners are unavailable",
+                Label(info.ready ? "Listening for streams on this Mac" : "Some streaming ports are unavailable",
                       lucide: info.ready ? .circleCheck : .triangleAlert)
                 if !info.ready { Text(info.unavailableListeners.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary) }
                 Text("Running base port: \(String(info.basePort))").font(.caption)
@@ -42,13 +42,12 @@ struct ConnectionHandoffView: View {
                     Text("Saved port \(String(saved)) takes effect after a host restart.").font(.caption).foregroundStyle(.orange)
                 }
             } else {
-                Text("Streaming listener readiness is unknown until the host connects.").foregroundStyle(.secondary)
-                Text("The running port is also unknown. Wait for the host before using Add Host.").font(.caption).foregroundStyle(.secondary)
+                Text("Waiting for the streaming service to report its ports.").foregroundStyle(.secondary)
             }
             if addresses.isEmpty {
                 Text("No usable local network address was found. Connect this Mac to your network, then refresh.").font(.callout)
             } else {
-                Text("If discovery does not find this Mac, use Add Host on your client:").font(.callout)
+                Text("If the Mac doesn't appear on your other device, paste an address into Add Host.").font(.callout)
                 ForEach(addresses) { item in
                     HStack {
                         VStack(alignment: .leading) {
@@ -65,7 +64,7 @@ struct ConnectionHandoffView: View {
                     }
                 }
             }
-            Text("These are this Mac’s addresses and local listener checks. The client must be able to reach the selected network; this does not test a router or Internet ports.")
+            Text("These checks run on this Mac. Your other device still needs to be able to reach the selected address.")
                 .font(.caption).foregroundStyle(.secondary)
             Button(checking ? "Checking…" : "Refresh Connection Details") { Task { await refresh() } }.disabled(checking)
         }

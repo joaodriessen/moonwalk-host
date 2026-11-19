@@ -1,6 +1,9 @@
 # Security
 
-Use Moonwalk Host with devices you control on a trusted local network. A paired client can see your screen and control the logged-in user session while the host is open and the client is streaming. Review or remove devices in **Settings → Devices**. Leave the router’s port forwarding and UPnP off.
+Pair only devices you trust. A paired client can view and control your
+logged-in Mac while streaming. Review or remove devices under
+**Settings → Devices**. Use a trusted network and leave the router's port
+forwarding and UPnP off.
 
 | Part of the connection | Protection |
 | --- | --- |
@@ -10,7 +13,11 @@ Use Moonwalk Host with devices you control on a trusted local network. A paired 
 | LAN video | Unencrypted by default. Choose **Required** under **Settings → Network → Advanced → Local network encryption** to require encryption from clients that support it |
 | Audio | Encrypted when the client requests it |
 
-The menu app and service verify each other’s signing identity. Quit closes the service. A release DMG uses Developer ID signing, hardened runtime and Apple notarization. Diagnostics are saved locally and redact common identifiers and secrets. Review them before sharing.
+The menu and the streaming service check each other's signing identity.
+**Quit Moonwalk Host** stops the service. Release DMGs use Developer ID
+signing, hardened runtime, and Apple notarization. **Save Diagnostics…**
+writes a ZIP locally and masks common identifiers and credentials. Review
+the archive before sharing it.
 
 ## Report a vulnerability
 

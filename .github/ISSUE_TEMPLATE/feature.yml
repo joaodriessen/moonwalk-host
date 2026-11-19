@@ -1,5 +1,5 @@
-name: Feature request
-description: Suggest an improvement.
+name: Suggest a change
+description: Suggest something Moonwalk Host could make easier.
 labels: [enhancement]
 body:
   - type: textarea

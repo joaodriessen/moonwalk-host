@@ -10,7 +10,9 @@ Yes, while Moonwalk Host is open. Pair only devices you trust and remove old one
 
 ## Can I use my Mac with no monitor?
 
-Virtual display, enabled by default, is intended for this. The Mac needs to be awake and logged in. Use a monitor or Screen Sharing to finish setup first. Wake, lock screen and closed-lid behavior still need broader qualification. [Compatibility](../compatibility.md)
+Yes, with **Virtual display** enabled and the Mac awake and logged in. Use a
+monitor or Screen Sharing to finish setup first. Wake, lock screen, and
+closed-lid behavior are still being tested. [Compatibility](../compatibility.md)
 
 ## What happens to the physical display?
 
@@ -22,7 +24,9 @@ Screen Recording lets the host capture the desktop. Accessibility lets it send k
 
 ## Does the app contact a server?
 
-There are no accounts, analytics or automatic update checks in the app. Release links open in your browser. The optional web settings page has its own network requests. [Network behavior](how-it-works.md#network-behavior)
+Moonwalk Host has no account or analytics service and doesn't check for updates
+automatically. Release links open in your browser. Cover art search in the web
+settings contacts external services. [Network behavior](how-it-works.md#network-behavior)
 
 ## How do I stop, update or remove it?
 

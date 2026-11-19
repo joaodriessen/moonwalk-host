@@ -1,7 +1,6 @@
 // swift-tools-version: 6.0
-// S0 walking skeleton (docs/design/menubar-app.md): the native Skylight menubar app.
-// A plain SwiftPM executable -- build.sh wraps the built binary into a proper
-// SkylightMenu.app bundle (Info.plist, LSUIElement) and signs it. No Xcode project needed.
+// SwiftPM builds the menu executable. The packaging scripts assemble and sign
+// the app bundle and its streaming service.
 import PackageDescription
 
 let package = Package(
@@ -10,9 +9,7 @@ let package = Package(
         .macOS(.v14)
     ],
     targets: [
-        // Pure logic: config-schema decode model + the hand-authored settings-catalog enums/
-        // formatters. No SwiftUI View bodies, no HostConnection/XPC calls -- this is the one
-        // piece with real unit-test coverage.
+        // Models and settings logic shared by the menu and headless tests.
         .target(
             name: "SkylightMenuCore",
             path: "Sources/SkylightMenuCore"

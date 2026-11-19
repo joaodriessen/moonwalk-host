@@ -1,6 +1,7 @@
 # Troubleshooting
 
-Find what you're seeing below. Most fixes are under **Settings… → Status**, which you open from the Moonwalk Host menu bar icon.
+Open **Settings…** from the Moonwalk Host menu bar icon. The **Status** page
+shows the service, permissions, and repair controls.
 
 ## My Mac doesn't appear on my other device
 
@@ -14,7 +15,9 @@ Find what you're seeing below. Most fixes are under **Settings… → Status**, 
 
 **Can't Verify Moonwalk Host** means the app couldn't confirm that the service is genuinely Moonwalk Host's. If the steps below don't clear it, install a fresh copy from the DMG.
 
-For either message, open **Settings… → Status**. If Moonwalk Host can't reach its service, it offers **Repair Streaming Host…**. That checks the installation, restarts the service and waits for it to come back. Your settings and paired devices are kept.
+For either message, open **Settings… → Status** and choose
+**Repair Streaming Host…** if offered. Repair checks the installation and starts
+the service again. It keeps your settings and paired devices.
 
 ## I'm stuck on "Setup needs attention"
 
@@ -43,7 +46,10 @@ Other remote-desktop or display-management tools can disable Moonwalk Host's dis
 
 ## There's no sound
 
-Sound is on by default, using your Mac's system audio. In **Settings… → Streaming**, check that **Stream this Mac's sound** is on, then press **Test Sound** for a two-second test. It plays nothing and saves nothing. The test isn't available during a stream. If you chose a microphone as the source, the same section can take you to the Microphone permission.
+End the stream, then open **Settings… → Streaming**. Turn on **Stream this
+Mac’s sound**, play something on the Mac, and press **Test Sound**. The test
+reports whether it picked up sound from the selected source. For a microphone,
+check the Microphone permission in the same section.
 
 ## The stream is choppy
 
@@ -60,8 +66,6 @@ If another tool or a text edit changes Moonwalk Host's settings file while Setti
 3. [Open an issue](https://github.com/joaodriessen/moonwalk-host/issues/new/choose). The form asks for the rest.
 
 For more detail, turn on **Detailed logging** in **Settings… → Status → Advanced** first, and restart Moonwalk Host.
-
-There is no normal setup step that requires turning off Mac security protections. If something tells you to, please ask first.
 
 ---
 

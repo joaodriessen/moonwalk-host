@@ -17,7 +17,8 @@
 
 ## Moonwalk features
 
-Any compatible Moonlight client uses the same basic video, sound and input protocol. Both Moonwalk and Moonwalk Host must support a companion feature to use it.
+Video, sound, and input use the Moonlight protocol. The features below need
+compatible versions of both Moonwalk and Moonwalk Host.
 
 | Feature | What it covers |
 | --- | --- |
@@ -39,4 +40,10 @@ Any compatible Moonlight client uses the same basic video, sound and input proto
 | 48000 | UDP | Audio |
 | 47990 | TCP | Optional web settings |
 
-Moonwalk Host advertises the `_nvstream._tcp` service through mDNS. The optional web settings page is off by default. Its app catalogue and artwork search can request resources from `app.lizardbyte.dev` and `images.igdb.com`. Router setup through UPnP is off by default. [Security](../../SECURITY.md) · [Architecture](../architecture.md)
+Moonwalk Host advertises the `_nvstream._tcp` service through mDNS. The web
+settings page and UPnP router setup are off by default.
+
+If you search for cover art in the web app editor, the browser looks up game
+data in LizardByte's GameDB on `raw.githubusercontent.com` and loads previews
+from `images.igdb.com`. If you save a cover, Moonwalk Host downloads the image
+from IGDB. [Security](../../SECURITY.md) · [Architecture](../architecture.md)

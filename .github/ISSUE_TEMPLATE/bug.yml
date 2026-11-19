@@ -1,5 +1,5 @@
-name: Bug report
-description: Tell us what went wrong.
+name: Report a bug
+description: Report a problem someone else can try to reproduce.
 labels: [bug]
 body:
   - type: markdown
@@ -7,7 +7,7 @@ body:
       value: "For suspected security vulnerabilities, follow [Security](https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md). Do not post credentials or vulnerability details in an ordinary issue."
   - type: input
     id: version
-    attributes: {label: Moonwalk Host version}
+    attributes: {label: Moonwalk Host version, description: Open Settings → Status → About Moonwalk Host.}
     validations: {required: true}
   - type: input
     id: system
@@ -15,7 +15,9 @@ body:
     validations: {required: true}
   - type: textarea
     id: steps
-    attributes: {label: Steps to reproduce}
+    attributes:
+      label: How can we reproduce it?
+      description: Include the client and whether the Mac was sharing a physical or virtual display if it affects the problem.
     validations: {required: true}
   - type: textarea
     id: expected
@@ -23,4 +25,6 @@ body:
     validations: {required: true}
   - type: textarea
     id: diagnostics
-    attributes: {label: Diagnostics or screenshots, description: Review and remove private details before attaching.}
+    attributes:
+      label: Diagnostics or screenshots
+      description: Use Save Diagnostics in Settings → Status → Support. Review the ZIP and remove private details before attaching it.

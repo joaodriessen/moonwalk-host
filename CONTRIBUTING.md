@@ -6,7 +6,9 @@ Review logs and images before sharing them. Use fictional device names and addre
 
 ## Make a change
 
-- Follow the [build guide](docs/BUILDING.md) and test what you changed. The workflow runs the Swift package and headless C++ tests on Apple Silicon. Display, audio, permissions and pairing changes also need a real Mac.
+- Follow the [build guide](docs/BUILDING.md) and run the checks locally while
+  Actions is disabled. Changes to display, audio, permissions, or pairing also
+  need a live test on a Mac.
 - For daemon/menu changes, keep the trusted XPC peer requirements tied to the same release identity. For defaults or settings, check both the C++ parser and the Swift UI. [Architecture](docs/architecture.md)
 - Add a focused regression test when an existing test would miss the bug. In the pull request, describe what you verified and what needs a live check.
 - Use a GitHub no-reply or project email in commits before pushing. Run the privacy check on the staged changes. Build outputs, diagnostics and personal test data belong outside the repository.

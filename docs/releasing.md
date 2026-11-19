@@ -1,6 +1,8 @@
 # Release checklist
 
-Build from a clean commit with the [release command](BUILDING.md#build-a-tester-installer). Preserve the bundle and signing identifiers for upgrades. The command produces a local DMG, so release uploads and visibility changes are separate steps.
+Build from a clean commit with the [release command](BUILDING.md#build-a-tester-installer).
+Keep the bundle and signing identifiers for upgrades. The command puts the
+DMG on your Mac for testing before you decide whether to share it.
 
 ## Source and distribution
 
@@ -10,6 +12,10 @@ Build from a clean commit with the [release command](BUILDING.md#build-a-tester-
 - Review issues, pull requests and attachments for private data. Prepare a [private reporting route](../SECURITY.md). GitHub offers its form on public repositories. If using it, enable it and verify it from a non-maintainer account as soon as the repository is public, before announcing it. Check anonymous source access at the same time. [GitHub setup guide](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository)
 - Inspect the Developer ID name embedded in the app and DMG signatures before sharing either artifact. macOS exposes that name through the signatures. The checksum receipt omits it. Review source visibility and installer distribution separately.
 - Set the intended version in `macos-dist/skylight-identity.conf` and record the changes. Keep the source commit, checksum, release manifest and verified DMG together. Retain a previously tested signed DMG for rollback.
+- GitHub Actions is disabled during the private alpha. When the repository is
+  ready for public CI, enable Actions under **Settings → Actions → General**.
+  Run **build** manually and check that the Linux web and Apple Silicon jobs
+  complete. The [build guide](BUILDING.md) covers local testing.
 
 ## Share an installer checksum
 
@@ -41,4 +47,8 @@ Record the Mac, OS, client, source revision and artifact hash with each result. 
 
 ## Maintenance
 
-Review Actions and npm updates through CI. The C++ dependencies in `third-party/` are vendored. Update those sources and package dependencies against their upstream releases, with license and build checks. Run release signing on a maintainer-controlled Mac. Keep credentials out of pull request workflows and review artifacts before attaching them to a release.
+Review Actions and npm updates with the same checks you use for a code change.
+When updating the C++ sources under `third-party/`, check the upstream
+release, licenses, and native build. Sign releases on a maintainer-controlled
+Mac. Keep credentials out of pull request workflows and review artifacts
+before attaching them to a release.

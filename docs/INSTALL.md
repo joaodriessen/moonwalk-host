@@ -18,7 +18,9 @@ Moonwalk Host checks where it's running from. If it isn't in Applications, it as
 
 A window titled **Welcome to Moonwalk Host** takes you through setup. It comes back each time you open Moonwalk Host until you've finished.
 
-Moonwalk Host turns on **Open at Login** when it first starts and asks whether it may show notifications. You can turn off Open at Login later, in **Settings… → Status → General**, and it stays off.
+Moonwalk Host enables its login item on first launch and asks whether it can
+show notifications. To start it by hand instead, turn off
+**Open Moonwalk Host at Login** in **Settings… → Status → General**.
 
 ### Allow the background service
 
@@ -53,9 +55,13 @@ Your Mac now shows as ready on your other device. Connect from there. In Moonwal
 
 Moonwalk Host lives in the menu bar, and that's the only place you'll usually see it.
 
-**Quit Moonwalk Host** stops streaming and stops the service, so nothing is listening until you open it again. It asks first if someone is connected.
+**Quit Moonwalk Host** stops the service. If someone is streaming, it asks
+before disconnecting them.
 
-With the default disconnect setting, the menu shows **Ready to Resume** after you leave. The extra display is released. Reconnect to use the same Desktop target.
+If the client leaves the Desktop session running, the menu shows **Ready to
+Resume**. Capture stops and the virtual display is released. Some clients,
+including Moonwalk, can also ask the host to end the Desktop session on
+disconnect.
 
 ## Updating
 

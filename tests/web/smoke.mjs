@@ -260,6 +260,10 @@ try {
     await hasText('Moonwalk Host accepted the restart request');
     assert.equal(restarts, 4);
 
+    const savedApps = apps.splice(0);
+    await openPage('/apps');
+    await hasText('No apps yet. Add one to make it available to your clients.');
+    apps.push(...savedApps);
     await openPage('/apps');
     await until(() => evaluate('Array.from(document.querySelectorAll(".app-initial")).map(el => el.textContent).join("") === "EM"'), 'missing cover fallback');
     await click('Edit');

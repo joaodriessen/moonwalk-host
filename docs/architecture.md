@@ -26,7 +26,12 @@ Sending the PIN starts the handshake. The menu can show the outcome after the cl
 
 ## Display and video
 
-The daemon maps the client’s request to a capture mode. When virtual display is enabled, it asks the helper to create the mode and manages its lifetime separately from the resumable Desktop target. The helper also monitors its parent so it can exit when the daemon disappears. Test normal disconnect, failed launch and crash cleanup independently. The virtual display uses private macOS APIs, which makes OS upgrades a runtime qualification case.
+The daemon turns the client's request into a capture mode. When virtual
+display is enabled, a helper creates the display. The daemon can release it
+while keeping the Desktop session available for resume. The helper watches
+the daemon and exits if it dies. Test cleanup after an ordinary disconnect,
+a failed launch, and a crash. Virtual displays use private macOS APIs, so
+retest them on a new OS release.
 
 ScreenCaptureKit supplies display frames and system audio. The host uses VideoToolbox for hardware video encoding. Moonwalk can request a bitrate change over the existing session when both ends support it. That updates the encoder target. The original request, incoming capture cadence, encoded cadence and client presentation rate are separate measurements.
 

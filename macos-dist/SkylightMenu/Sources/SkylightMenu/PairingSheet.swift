@@ -211,7 +211,7 @@ struct PairingSheet: View {
             Text("Verifying the PIN…")
                 .font(.system(size: SkylightTheme.TypeSize.body, weight: .medium))
                 .foregroundStyle(theme.label)
-            Text("Confirming with \(label) — this takes a moment.")
+            Text("Waiting for \(label) to confirm.")
                 .font(.system(size: SkylightTheme.TypeSize.caption))
                 .foregroundStyle(theme.label2)
                 .multilineTextAlignment(.center)
@@ -222,9 +222,7 @@ struct PairingSheet: View {
         .accessibilityLabel("Verifying the PIN, confirming with \(label)")
     }
 
-    /// Only reached once the paired-clients list has actually grown a new entry --
-    /// `clientpairingsecret()`'s real, phase-4 result, not phase 1's optimistic one. §2.7: the
-    /// payoff — a restrained centered celebration, one gentle bounce, no confetti/color flood.
+    /// Shown once the host confirms that this device was added to the paired list.
     private var pairedSection: some View {
         VStack(spacing: SkylightTheme.Spacing.s) {
             LucideIcon(.circleCheck, size: 44)
@@ -238,7 +236,7 @@ struct PairingSheet: View {
             Text("Paired")
                 .font(.system(size: SkylightTheme.TypeSize.headline, weight: .semibold))
                 .foregroundStyle(theme.label)
-            Text("Your device is connected. You can close this window.")
+            Text("You can now connect from your other device.")
                 .font(.system(size: SkylightTheme.TypeSize.caption))
                 .foregroundStyle(theme.label2)
                 .multilineTextAlignment(.center)

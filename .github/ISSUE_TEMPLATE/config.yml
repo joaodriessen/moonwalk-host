@@ -5,4 +5,4 @@ contact_links:
     about: Installing, settings and troubleshooting.
   - name: Security reporting
     url: https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md
-    about: Read the private reporting instructions; do not post vulnerability details in a public issue.
+    about: Find the private channel for reporting a vulnerability.

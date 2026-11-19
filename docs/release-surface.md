@@ -16,4 +16,9 @@ The downloadable app is assembled by `scripts/package-release.sh`. Finder calls 
 | `Contents/Resources/LICENSE.txt` and `THIRD-PARTY-NOTICES.txt` | License and dependency notices |
 | `Contents/Resources/ThirdPartyLicenses/` | License texts for the native and web dependencies |
 
-`scripts/release/verify-artifact.sh` checks the layout, library references and signatures. The release flow signs nested components before the app, verifies the DMG and staples the notarization ticket. If you edit a signed bundle, repackage it before testing. Signing or layout checks alone do not exercise Gatekeeper on a fresh Mac, the permission prompts or a live stream. [Release checklist](releasing.md)
+`scripts/release/verify-artifact.sh` checks the layout, library references,
+and signatures. The release signs the nested components and staples the
+app's ticket before making the DMG. It then checks the DMG and its own
+ticket. If you edit a signed bundle, repackage it before testing. Test
+Gatekeeper, permission prompts, and streaming on a real Mac.
+[Release checklist](releasing.md)

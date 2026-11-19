@@ -43,7 +43,7 @@ struct SoundTestView: View {
                 if let peak = result.peak { ProgressView(value: Double(min(1, max(0, peak)))).accessibilityLabel("Peak sound level") }
             }
             if let error { Text(error).font(.callout).foregroundStyle(.orange) }
-            Text("Plays nothing and saves no recording. Tests the selected source for two seconds after opening it; silent audio is reported separately from a permission or capture failure.")
+            Text("Listens to the selected source for two seconds and shows whether sound was detected. The test is silent and saves no recording.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .task(id: source) { permission = await host.microphonePermission(); result = nil }

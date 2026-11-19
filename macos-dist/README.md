@@ -9,4 +9,6 @@ This directory contains the Swift menu bar app, the service templates, the shipp
 - `sunshine.conf.example` contains the defaults used when setting up the packaged host. The installer resources and entitlements must agree with the signer and host binaries.
 - `tests/` includes checks for the schema and scripts that exercise a running host. Use a dedicated test Mac for tests that launch streams or change displays.
 
-The existing `Skylight.app` name and bundle identifiers are the upgrade contract. See the [architecture](../docs/architecture.md) and [bundle layout](../docs/release-surface.md) before changing them.
+Keep the `Skylight.app` filename and bundle identifiers so macOS recognizes
+the app and its service on upgrade. See the [architecture](../docs/architecture.md)
+and [bundle layout](../docs/release-surface.md) before changing them.

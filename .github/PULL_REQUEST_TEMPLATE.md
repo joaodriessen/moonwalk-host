@@ -1,8 +1,8 @@
-## What changed?
+## What changed and why?
 
+## How did you test it?
 
-## How did you check it?
+## What still needs checking?
 
-## Anything reviewers should watch for?
-
-Include a screenshot for interface changes. Remove private host details from logs and screenshots.
+For an interface change, show the affected screen with example data. Review
+logs and screenshots for private details before attaching them.

@@ -1,5 +1,5 @@
-name: Installation or help
-description: Get help with setup or streaming.
+name: Ask for help
+description: Ask about installing, pairing, or using a stream.
 labels: [help wanted]
 body:
   - type: markdown
@@ -7,7 +7,7 @@ body:
       value: "Remove private details before sharing. For suspected vulnerabilities, follow [Security](https://github.com/joaodriessen/moonwalk-host/blob/main/SECURITY.md)."
   - type: input
     id: version
-    attributes: {label: Moonwalk Host version}
+    attributes: {label: Moonwalk Host version, description: Open Settings → Status → About Moonwalk Host if the app starts.}
   - type: dropdown
     id: step
     attributes:
