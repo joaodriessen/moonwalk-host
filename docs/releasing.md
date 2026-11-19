@@ -6,7 +6,7 @@ Build from a clean commit with the [release command](BUILDING.md#build-a-tester-
 
 - Review all Git refs and their metadata. Check the exact tree with `python3 scripts/check-privacy.py --commit HEAD`. Check screenshots, archives, GitHub assets and logs separately. Verify the [public pairing fixture](test-fixtures.md) by fingerprint.
 - Confirm that a clean Apple Silicon checkout builds with the documented dependencies. Check the actual signed package against the [dependency sources and licenses](third-party.md), including patches used by FFmpeg. Keep the corresponding source available to the recipients of the DMG.
-- Verify private security reporting before publication. Review associated issues, pull requests and attachments for private data. Check anonymous source access after a visibility change.
+- Review issues, pull requests and attachments for private data. Prepare a [private reporting route](../SECURITY.md). GitHub offers its form on public repositories. If using it, enable it and verify it from a non-maintainer account as soon as the repository is public, before announcing it. Check anonymous source access at the same time. [GitHub setup guide](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/configure-vulnerability-reporting/configure-for-a-repository)
 - Inspect the Developer ID name embedded in the app and DMG signatures before sharing either artifact. macOS exposes that name through the signatures. The checksum receipt omits it. Review source visibility and installer distribution separately.
 - Set the intended version in `macos-dist/skylight-identity.conf` and record the changes. Keep the source commit, checksum, release manifest and verified DMG together. Retain a previously tested signed DMG for rollback.
 

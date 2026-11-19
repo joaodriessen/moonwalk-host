@@ -16,6 +16,6 @@ The menu app and service verify each other’s signing identity. Quit closes the
 
 While this repo is private, use a private channel to contact the maintainer. If you need help finding a channel, open an issue asking how to report privately and leave out technical details. Include the affected build, impact and a minimal reproduction with example data once a private channel is available.
 
-Before making the repo public, verify GitHub’s private vulnerability reporting or publish a monitored private contact here. The current alpha line is maintained on a best-effort basis.
+If GitHub shows **Report a vulnerability** under **Security → Advisories**, use that form. Keep vulnerability details out of public issues and pull requests. The current alpha line is maintained on a best-effort basis.
 
 [Release checklist](docs/releasing.md)
