@@ -67,7 +67,11 @@ touch "$APP/Contents/Frameworks/Stable/liblinked.dylib"
 ln -s Stable/liblinked.dylib "$APP/Contents/Frameworks/liblinked.dylib"
 ln -s "$WORK/liboutside.dylib" "$APP/Contents/Frameworks/libescape.dylib"
 
-audit() { PATH="$WORK/bin:$PATH" FIXTURE_MINOS="$1" FIXTURE_DEPENDENCY="$2" "$AUDITOR" "$APP"; }
+audit() {
+  local version="$1" dependency="$2"
+  shift 2
+  PATH="$WORK/bin:$PATH" FIXTURE_MINOS="$version" FIXTURE_DEPENDENCY="$dependency" "$AUDITOR" "$APP" "$@"
+}
 expect_audit_failure() {
   if audit "$1" "$2" > "$WORK/audit.out" 2>&1; then
     fail "accepted $1 / $2"
@@ -77,9 +81,25 @@ expect_audit_failure() {
 
 audit 14.0 '@rpath/liblinked.dylib'
 audit 13.6.7 '@loader_path/../../Frameworks/libinside.dylib'
+touch "$APP/Contents/Frameworks/lib with spaces.dylib"
+audit 14.0 '@rpath/lib with spaces.dylib'
 expect_audit_failure 14.0.1 '@rpath/libinside.dylib' 'deployment target exceeds macOS 14.0'
 expect_audit_failure 14.0 '@rpath/libescape.dylib' 'dependency escapes app bundle'
 expect_audit_failure 14.0 '@loader_path/../../../../liboutside.dylib' 'dependency escapes app bundle'
 expect_audit_failure 14.0 fail 'could not read dependencies'
 
-echo "PASS: Mach-O dependency audit rejects support floor and bundle escapes"
+private_root="$WORK/Release workspace"
+helper="$APP/Contents/Resources/Helpers/Skylight"
+printf '\0opus-1.6.1/src/opus_decoder.c\0' > "$helper"
+audit 14.0 '@rpath/libinside.dylib' "$private_root"
+printf '\0%s/build/src/opus_decoder.c\0' "$private_root" > "$helper"
+if audit 14.0 '@rpath/libinside.dylib' "$private_root" > "$WORK/audit.out" 2>&1; then
+  fail "accepted embedded build path"
+fi
+grep -Fq 'embedded build path in Contents/Resources/Helpers/Skylight' "$WORK/audit.out" ||
+  fail "embedded build path error did not identify the binary"
+if grep -Fq "$private_root" "$WORK/audit.out"; then
+  fail "the error printed the private build path"
+fi
+
+echo "PASS: Mach-O dependency audit rejects support floor, bundle escapes, and embedded build paths"

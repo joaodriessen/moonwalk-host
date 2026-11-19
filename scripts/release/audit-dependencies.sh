@@ -5,16 +5,35 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=macho-dependencies.sh
 source "$DIR/macho-dependencies.sh"
 
-[ "$#" -eq 1 ] || { echo "Usage: $0 APP" >&2; exit 64; }
+[ "$#" -ge 1 ] || { echo "Usage: $0 APP [BUILD_ROOT ...]" >&2; exit 64; }
 APP="$1"
+shift
 [ -d "$APP/Contents" ] || { echo "ERROR: invalid app bundle: $APP" >&2; exit 1; }
 CONTENTS="$(realpath "$APP/Contents")"
+for root in "$@"; do
+  case "$root" in
+    /*/*) ;;
+    *) echo "ERROR: build roots must be absolute directory paths" >&2; exit 64 ;;
+  esac
+done
 
 failures=0
 machos=0
 while IFS= read -r -d '' candidate; do
   is_macho_file "$candidate" || continue
   machos=$((machos + 1))
+
+  for root in "$@"; do
+    if LC_ALL=C grep -aFq -- "${root%/}/" "$candidate"; then
+      echo "ERROR: embedded build path in ${candidate#"$APP"/}" >&2
+      failures=$((failures + 1))
+      break
+    elif [ "$?" -ne 1 ]; then
+      echo "ERROR: could not check for embedded build paths in ${candidate#"$APP"/}" >&2
+      failures=$((failures + 1))
+      break
+    fi
+  done
 
   if ! lipo -archs "$candidate" | tr ' ' '\n' | grep -qx arm64; then
     echo "ERROR: missing arm64 architecture: $candidate" >&2

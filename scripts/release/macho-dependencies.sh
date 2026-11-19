@@ -12,7 +12,8 @@ is_macho_file() {
 }
 
 list_macho_dependencies() {
-  otool -L "$1" | tail -n +2 | sed -E 's/^[[:space:]]*([^[:space:]]+).*/\1/'
+  otool -L "$1" | tail -n +2 |
+    sed -E 's/^[[:space:]]*//; s/[[:space:]]+\(compatibility version [0-9.]+, current version [0-9.]+[^)]*\)$//'
 }
 
 resolve_dependency() {

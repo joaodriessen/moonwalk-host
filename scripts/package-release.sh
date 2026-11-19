@@ -198,7 +198,7 @@ plutil -lint "$APP/Contents/Info.plist" "$APP/Contents/Resources/en.lproj/InfoPl
   "$APP/Contents/MacOS/Skylight" \
   "$APP/Contents/Resources/Helpers/Skylight" \
   "$APP/Contents/Resources/Helpers/vd_helper"
-"$DIR/release/audit-dependencies.sh" "$APP"
+"$DIR/release/audit-dependencies.sh" "$APP" "$REPO" "$DEPS_ROOT"
 "$DIR/release/tests/test-app-layout.sh" "$APP"
 
 signing_options=(--force --options runtime)
