@@ -7,6 +7,7 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 // standard includes
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -233,12 +234,9 @@ namespace confighttp {
   /**
    * @brief Send a redirect response.
    * @param response The HTTP response object.
-   * @param request The HTTP request object.
    * @param path The path to redirect to.
    */
-  void send_redirect(resp_https_t response, req_https_t request, const char *path) {
-    auto address = net::addr_to_normalized_string(request->remote_endpoint().address());
-    BOOST_LOG(info) << "Web UI: ["sv << address << "] -- not authorized"sv;
+  void send_redirect(resp_https_t response, const std::string &path) {
     const SimpleWeb::CaseInsensitiveMultimap headers {
       {"Location", path},
       {"X-Frame-Options", "DENY"},
@@ -263,9 +261,9 @@ namespace confighttp {
       return false;
     }
 
-    // If credentials are shown, redirect the user to a /welcome page
+    // First-run setup has its own page until credentials are set.
     if (config::sunshine.username.empty()) {
-      send_redirect(response, request, "/welcome");
+      send_redirect(response, "/welcome");
       return false;
     }
 
@@ -684,7 +682,7 @@ namespace confighttp {
   void getWelcomePage(resp_https_t response, req_https_t request) {
     print_req(request);
     if (!config::sunshine.username.empty()) {
-      send_redirect(response, request, "/");
+      send_redirect(response, "/");
       return;
     }
     std::string content = read_web_file("welcome.html");
@@ -2029,12 +2027,29 @@ namespace confighttp {
       not_found(response, request);
     };
     server.resource["^/$"]["GET"] = getIndexPage;
-    server.resource["^/pin/?$"]["GET"] = getPinPage;
-    server.resource["^/apps/?$"]["GET"] = getAppsPage;
-    server.resource["^/config/?$"]["GET"] = getConfigPage;
-    server.resource["^/password/?$"]["GET"] = getPasswordPage;
-    server.resource["^/welcome/?$"]["GET"] = getWelcomePage;
-    server.resource["^/troubleshooting/?$"]["GET"] = getTroubleshootingPage;
+    const std::pair<std::string, decltype(&getIndexPage)> pages[] {
+      {"/pin", getPinPage},
+      {"/apps", getAppsPage},
+      {"/config", getConfigPage},
+      {"/password", getPasswordPage},
+      {"/welcome", getWelcomePage},
+      {"/troubleshooting", getTroubleshootingPage}
+    };
+    for (const auto &[path, handler] : pages) {
+      server.resource["^" + path + "$"]["GET"] = handler;
+      // Document assets and navigation links resolve relative to this URL.
+      server.resource["^" + path + "/$"]["GET"] = [path](resp_https_t response, req_https_t request) {
+        const auto &query = request->query_string;
+        // The query is still percent-encoded. Only forward printable URL bytes.
+        if (!query.empty() && std::all_of(query.begin(), query.end(), [](unsigned char byte) {
+              return byte > ' ' && byte < 0x7f;
+            })) {
+          send_redirect(response, path + "?" + query);
+        } else {
+          send_redirect(response, path);
+        }
+      };
+    }
     server.resource["^/api/pin$"]["POST"] = savePin;
     server.resource["^/api/apps$"]["GET"] = getApps;
     server.resource["^/api/logs$"]["GET"] = getLogs;

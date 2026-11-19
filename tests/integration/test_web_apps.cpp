@@ -18,7 +18,7 @@
 #include "src/process.h"
 #include "src/utility.h"
 
-TEST(WebApps, RejectsEditsFromAStaleApplicationList) {
+TEST(WebApps, RedirectsPageAliasesAndRejectsStaleApplicationEdits) {
   namespace fs = std::filesystem;
   using boost::asio::ip::tcp;
   using namespace std::chrono_literals;
@@ -87,6 +87,27 @@ TEST(WebApps, RejectsEditsFromAStaleApplicationList) {
   }
   ASSERT_TRUE(first);
   ASSERT_TRUE(first->status_code.starts_with("200 "));
+
+  for (const std::string page : {"/pin", "/apps", "/config", "/password", "/welcome", "/troubleshooting"}) {
+    SCOPED_TRACE(page);
+    // A trailing slash would make the browser look for relative assets one
+    // directory too deep. Preserve the settings query during the redirect.
+    const auto alias = client.request("GET", page + "/?tab=general&value=a%2Fb", "", headers);
+    EXPECT_TRUE(alias->status_code.starts_with("307 "));
+    const auto location = alias->header.find("Location");
+    if (location != alias->header.end()) {
+      EXPECT_EQ(location->second, page + "?tab=general&value=a%2Fb");
+    } else {
+      ADD_FAILURE() << "Missing Location header";
+    }
+  }
+  const auto canonical = client.request("GET", "/config?tab=general", "", headers);
+  EXPECT_TRUE(canonical->status_code.starts_with("200 "));
+  const auto protected_page = client.request("GET", "/config");
+  EXPECT_TRUE(protected_page->status_code.starts_with("401 "));
+  const auto unrelated = client.request("GET", "/missing/");
+  EXPECT_TRUE(unrelated->status_code.starts_with("404 "));
+
   ASSERT_TRUE(first->header.contains("ETag"));
   headers.emplace("If-Match", first->header.find("ETag")->second);
 
