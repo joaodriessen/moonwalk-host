@@ -35,11 +35,11 @@
             <input type="password" class="form-control" id="confirmPasswordInput" autocomplete="new-password"
               v-model="passwordData.confirmNewPassword" required />
           </div>
-          <button type="submit" class="btn btn-primary w-100 mb-2" v-bind:disabled="loading">
+          <button type="submit" class="btn btn-primary w-100 mb-2" :disabled="loading || success">
             {{ $t('welcome.login') }}
           </button>
-          <div class="alert alert-danger" v-if="error"><b>{{ $t('_common.error') }}</b> {{error}}</div>
-          <div class="alert alert-success" v-if="success">
+          <div class="alert alert-danger" v-if="error" role="alert"><b>{{ $t('_common.error') }}</b> {{error}}</div>
+          <div class="alert alert-success" v-if="success" role="status">
             <b>{{ $t('_common.success') }}</b> {{ $t('welcome.welcome_success') }}
           </div>
         </form>
@@ -54,6 +54,7 @@
 <script type="module">
   import { createApp } from "vue"
   import ResourceCard from './ResourceCard.vue'
+  import { saveCredentials } from './save-credentials'
   import { initApp } from './init'
 
   let app = createApp({
@@ -72,35 +73,7 @@
         },
       };
     },
-    methods: {
-      save() {
-        this.error = null;
-        this.loading = true;
-        fetch("./api/password", {
-          method: "POST",
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(this.passwordData),
-        }).then((r) => {
-          this.loading = false;
-          if (r.status === 200) {
-            r.json().then((rj) => {
-              this.success = rj.status;
-              if (this.success === true) {
-                setTimeout(() => {
-                  document.location.reload();
-                }, 5000);
-              } else {
-                this.error = rj.error;
-              }
-            });
-          } else {
-            this.error = "Internal Server Error";
-          }
-        });
-      },
-    },
+    methods: { save: saveCredentials },
   });
 
   initApp(app);

@@ -36,6 +36,10 @@
 - The browser checks that an application still matches the list you opened
   before saving or deleting it. Failed saves leave your draft on the page.
 - Keep the browser setup usable in English if its language request fails.
+- First-run setup and password changes show host validation errors, preserve
+  the form when the response is lost, and clear password fields after confirmation.
+- The browser marks the current page and makes the theme menu keyboard accessible.
+  Automatic follows the local appearance, including when preference storage is blocked.
   Label the application editor’s preparation and background command controls.
 - Load browser files, app artwork and settings schemas from the running Host
   bundle so a second installed copy cannot supply outdated assets.

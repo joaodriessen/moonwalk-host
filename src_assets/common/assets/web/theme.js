@@ -1,15 +1,3 @@
-const getStoredTheme = () => localStorage.getItem('theme')
-const setStoredTheme = theme => localStorage.setItem('theme', theme)
-
-export const getPreferredTheme = () => {
-    const storedTheme = getStoredTheme()
-    if (storedTheme) {
-        return storedTheme
-    }
-
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-}
-
 // Define which themes are dark (for Bootstrap compatibility)
 const darkThemes = new Set([
     'dark',
@@ -20,24 +8,7 @@ const darkThemes = new Set([
     'slate',
 ])
 
-const setTheme = theme => {
-    if (theme === 'auto') {
-        const preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        document.documentElement.dataset.bsTheme = preferredTheme
-        document.documentElement.dataset.theme = preferredTheme
-        console.log(`Theme set to auto (resolved to: ${preferredTheme})`)
-    } else {
-        // Set Bootstrap's data-bs-theme to 'light' or 'dark' for Bootstrap's own styles
-        const bsTheme = darkThemes.has(theme) ? 'dark' : 'light'
-        document.documentElement.dataset.bsTheme = bsTheme
-
-        // Set our custom data-theme attribute for our color schemes
-        document.documentElement.dataset.theme = theme
-        console.log(`Theme set to: ${theme} (Bootstrap: ${bsTheme})`)
-    }
-}
-
-export const showActiveTheme = (theme, focus = false) => {
+function showActiveTheme(theme, buttons, focus) {
     const themeSwitcher = document.querySelector('#bd-theme')
 
     if (!themeSwitcher) {
@@ -46,7 +17,7 @@ export const showActiveTheme = (theme, focus = false) => {
 
     const themeSwitcherText = document.querySelector('#bd-theme-text')
     const activeThemeIcon = document.querySelector('.theme-icon-active svg')
-    const btnToActive = document.querySelector(`[data-bs-theme-value="${theme}"]`)
+    const btnToActive = buttons.find(button => button.dataset.bsThemeValue === theme)
 
     if (!btnToActive) {
         return
@@ -58,7 +29,7 @@ export const showActiveTheme = (theme, focus = false) => {
         return
     }
 
-    document.querySelectorAll('[data-bs-theme-value]').forEach(element => {
+    buttons.forEach(element => {
         element.classList.remove('active')
         element.setAttribute('aria-pressed', 'false')
     })
@@ -79,35 +50,36 @@ export const showActiveTheme = (theme, focus = false) => {
 }
 
 export function setupThemeToggleListener() {
-    document.querySelectorAll('[data-bs-theme-value]')
-        .forEach(toggle => {
-            toggle.addEventListener('click', () => {
-                const theme = toggle.getAttribute('data-bs-theme-value')
-                setStoredTheme(theme)
-                setTheme(theme)
-                showActiveTheme(theme, true)
-            })
-        })
+    const buttons = Array.from(document.querySelectorAll('[data-bs-theme-value]'))
+    const appearance = window.matchMedia('(prefers-color-scheme: dark)')
+    let selection = 'auto'
+    try {
+        const saved = localStorage.getItem('theme')
+        if (buttons.some(button => button.dataset.bsThemeValue === saved)) selection = saved
+    } catch {
+        // Browsers can block preference storage for this origin.
+    }
 
-    showActiveTheme(getPreferredTheme(), false)
-}
+    function applyTheme() {
+        const theme = selection === 'auto' ? (appearance.matches ? 'dark' : 'light') : selection
+        document.documentElement.dataset.theme = theme
+        document.documentElement.dataset.bsTheme = darkThemes.has(theme) ? 'dark' : 'light'
+    }
 
-export function loadAutoTheme() {
-    (() => {
-        'use strict'
-
-        setTheme(getPreferredTheme())
-
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-            const storedTheme = getStoredTheme()
-            // Only auto-switch if theme is set to 'auto'
-            if (storedTheme === 'auto' || !storedTheme) {
-                setTheme(getPreferredTheme())
+    for (const button of buttons) {
+        button.addEventListener('click', () => {
+            selection = button.dataset.bsThemeValue
+            applyTheme()
+            showActiveTheme(selection, buttons, true)
+            try {
+                localStorage.setItem('theme', selection)
+            } catch {
+                // The current page still uses the chosen appearance.
             }
         })
-
-        window.addEventListener('DOMContentLoaded', () => {
-            showActiveTheme(getPreferredTheme())
-        })
-    })()
+    }
+    applyTheme()
+    showActiveTheme(selection, buttons, false)
+    appearance.addEventListener('change', applyTheme)
+    return () => appearance.removeEventListener('change', applyTheme)
 }

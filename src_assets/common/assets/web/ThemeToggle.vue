@@ -1,6 +1,6 @@
 <script setup>
-import { loadAutoTheme, setupThemeToggleListener } from './theme'
-import { onMounted } from 'vue'
+import { setupThemeToggleListener } from './theme'
+import { onMounted, onUnmounted } from 'vue'
 import {
   CloudMoon,
   CloudRain,
@@ -19,25 +19,26 @@ import {
   Waves,
 } from 'lucide-vue-next'
 
+let removeAppearanceListener
 onMounted(() => {
-  loadAutoTheme()
-  setupThemeToggleListener()
+  removeAppearanceListener = setupThemeToggleListener()
 })
+onUnmounted(() => removeAppearanceListener?.())
 </script>
 
 <template>
   <div class="dropdown bd-mode-toggle">
-    <a class="nav-link dropdown-toggle d-flex align-items-center"
+    <button class="nav-link dropdown-toggle d-flex align-items-center"
             id="bd-theme"
             type="button"
             aria-expanded="false"
             data-bs-toggle="dropdown"
-            aria-label="{{ $t('navbar.toggle_theme') }} ({{ $t('navbar.theme_auto') }})">
+            :aria-label="$t('navbar.toggle_theme')">
       <span class="theme-icon-active">
         <MonitorSmartphone :size="18" class="icon"></MonitorSmartphone>
       </span>
       <span id="bd-theme-text">{{ $t('navbar.toggle_theme') }}</span>
-    </a>
+    </button>
     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="bd-theme-text">
       <li>
         <button type="button" class="dropdown-item d-flex align-items-center active" data-bs-theme-value="auto" aria-pressed="true">

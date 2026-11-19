@@ -30,6 +30,8 @@ const appChanges = [];
 const pairingRequests = [];
 let pendingPairings = [];
 let pairingReply = { status: false };
+let credentialReply = 'reject';
+let credentialPosts = 0;
 const contentTypes = {
   '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
@@ -61,6 +63,12 @@ const server = createServer(async (req, res) => {
         return req.socket.destroy();
       }
       return sendJSON(res, restartReply);
+    }
+    if (path === '/api/password' && req.method === 'POST') {
+      credentialPosts++;
+      if (credentialReply === 'reject') return sendJSON(res, { error: 'Password Mismatch' }, 400);
+      if (credentialReply === 'invalid') return res.writeHead(200).end('{');
+      return sendJSON(res, { status: true });
     }
     if (path === '/api/clients/list') return sendJSON(res, { status: true, named_certs: [] });
     if (path === '/api/pending-pairings') return sendJSON(res, { status: true, pending: pendingPairings });
@@ -187,10 +195,33 @@ try {
 
   for (const page of pages) {
     await openPage(page);
+    if (page !== '/welcome') {
+      assert.equal(await evaluate(`document.querySelector('.navbar-nav [aria-current="page"]')?.pathname`), page);
+    }
     console.log('Mounted', page);
   }
   assert.deepEqual(jsErrors, []);
   if (!mountOnly) {
+    await openPage('/');
+    assert.equal(await evaluate("document.querySelector('[data-bs-theme-value].active')?.dataset.bsThemeValue"), 'auto');
+    assert.equal(await evaluate("document.querySelector('#bd-theme').tabIndex"), 0);
+    await evaluate("document.querySelector('[data-bs-theme-value=dark]').click()");
+    await openPage('/config');
+    assert.equal(await evaluate('document.documentElement.dataset.theme'), 'dark');
+    assert.equal(await evaluate("document.querySelector('[data-bs-theme-value].active')?.dataset.bsThemeValue"), 'dark');
+    await evaluate("document.querySelector('[data-bs-theme-value=auto]').click()");
+    const blockedStorage = await cmd('script.addPreloadScript', {
+      functionDeclaration: `() => Object.defineProperty(window, 'localStorage', {
+        get() { throw new DOMException('Storage is unavailable', 'SecurityError'); }
+      })`
+    });
+    await openPage('/apps');
+    assert.equal(await evaluate("document.querySelector('[data-bs-theme-value].active')?.dataset.bsThemeValue"), 'auto');
+    await evaluate("document.querySelector('[data-bs-theme-value=nord]').click()");
+    assert.equal(await evaluate('document.documentElement.dataset.theme'), 'nord');
+    assert.equal(await evaluate('document.documentElement.dataset.bsTheme'), 'dark');
+    await cmd('script.removePreloadScript', {script: blockedStorage.script});
+    console.log('Confirmed current-page navigation, automatic appearance, saved themes and blocked preference storage.');
     loadStatus = 503;
     await openPage('/config');
     await hasText('Couldn’t load settings');
@@ -285,6 +316,31 @@ try {
     assert.equal(await evaluate('document.documentElement.lang'), 'en');
     await hasText('Choose a username and password');
     selectedLocale = 'en';
+
+    for (const path of ['/welcome', '/password']) {
+      await openPage(path);
+      await evaluate(`document.querySelectorAll('form input').forEach(input => {
+        input.value = 'example-only';
+        input.dispatchEvent(new Event('input', {bubbles:true}));
+      })`);
+      const submit = "document.querySelector('form').requestSubmit()";
+      credentialReply = 'reject';
+      const initialPosts = credentialPosts;
+      await evaluate(submit + ';' + submit);
+      await hasText('Password Mismatch');
+      assert.equal(credentialPosts, initialPosts + 1);
+      credentialReply = 'invalid';
+      await evaluate(submit);
+      await hasText('Couldn’t confirm the sign-in details were saved');
+      assert.equal(await evaluate("document.querySelector('input[type=password]').value"), 'example-only');
+      credentialReply = 'accept';
+      await evaluate(submit);
+      await until(() => evaluate("!!document.querySelector('.alert-success')"), 'confirmed credentials');
+      assert.equal(await evaluate("Array.from(document.querySelectorAll('input[type=password]')).every(field => field.value === '')"), true);
+      await evaluate(submit);
+      assert.equal(credentialPosts, initialPosts + 3);
+    }
+    console.log('Confirmed credential setup and change handle rejection, incomplete responses and successful saves.');
 
     pendingPairings = [{ uniqueid: 'example-request', source_ip: '192.0.2.10', age_sec: 1 }];
     await openPage('/pin');

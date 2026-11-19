@@ -448,7 +448,8 @@
     "new_creds": "New Credentials",
     "new_username_desc": "If not specified, the username will not change",
     "password_change": "Password Change",
-    "success_msg": "Password has been changed successfully! This page will reload soon, your browser will ask you for the new credentials."
+    "save_unconfirmed": "Couldn’t confirm the sign-in details were saved. Try signing in with the new details before submitting again.",
+    "success_msg": "Your password was saved. When the page reloads, sign in with your new details."
   },
   "pin": {
     "device_name": "Device Name",

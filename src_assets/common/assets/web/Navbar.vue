@@ -68,17 +68,11 @@ export default {
     Info
   },
   mounted() {
-    try {
-      let path = document.location.pathname;
-      if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
-        path = CSS.escape(path);
-      } else {
-        path = path.replace(/'/g, "\\'");
+    for (const link of this.$el.querySelectorAll('.navbar-nav a[href]')) {
+      if (link.pathname === window.location.pathname) {
+        link.classList.add('active')
+        link.setAttribute('aria-current', 'page')
       }
-      let el = document.querySelector("a[href='" + path + "']");
-      if (el) el.classList.add("active")
-    } catch (e) {
-      console.warn("Navbar: failed to highlight active link", e);
     }
   }
 }
