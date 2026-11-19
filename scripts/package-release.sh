@@ -78,8 +78,7 @@ PKG_CONFIG_LIBDIR="$DEPS/lib/pkgconfig" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_OSX_ARCHITECTURES=arm64 \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
-    "-DCMAKE_C_FLAGS=-ffile-prefix-map=$REPO=. -fmacro-prefix-map=$REPO=." \
-    "-DCMAKE_CXX_FLAGS=-ffile-prefix-map=$REPO=. -fmacro-prefix-map=$REPO=." \
+    -DSKYLIGHT_MAP_SOURCE_PATHS=ON \
     -DCMAKE_PREFIX_PATH="$DEPS" \
     -DOPENSSL_ROOT_DIR="$DEPS" \
     -DOPENSSL_CRYPTO_LIBRARY="$DEPS/lib/libcrypto.a" \

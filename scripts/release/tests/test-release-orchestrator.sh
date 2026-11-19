@@ -8,7 +8,7 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 
 [ -x "$SOURCE_REPO/scripts/release.sh" ] || fail "release orchestrator is missing or not executable"
 
-REPO="$WORK/repo"
+REPO="$WORK/repo with a \"quote\""
 mkdir -p "$REPO/scripts/release" "$REPO/macos-dist" "$REPO/bin"
 SHASUM_DIR="$(dirname "$(command -v shasum)")"
 cp "$SOURCE_REPO/scripts/release.sh" "$REPO/scripts/release.sh"
@@ -170,6 +170,8 @@ mkdir -p "$REPO/build/releases/.release.lock"
 
 json="$(cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet)"
 [ "$(printf '%s' "$json" | plutil -extract status raw -o - -- -)" = "complete" ] || fail "quiet result is not successful JSON"
+published_path="$(printf '%s' "$json" | plutil -extract artifact raw -o - -- -)"
+[ "$published_path" -ef "$REPO/build/release/Moonwalk-Host-9.8.7-test-macOS-arm64.dmg" ] || fail "quiet result corrupted the artifact path"
 release_fingerprint="$(printf '%s' "$json" | plutil -extract fingerprint raw -o - -- -)"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/package")" = 1 ] || fail "package stage count is wrong"
 [ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")" = 1 ] || fail "app notarize stage count is wrong"

@@ -223,8 +223,25 @@ emit_result() {
   local resumed="$1"
   local sha
   sha="$(shasum -a 256 "$DMG" | awk '{print $1}')"
-  printf '{"status":"complete","version":"%s","fingerprint":"%s","commit":"%s","dirty":%s,"resumed":%s,"elapsedSeconds":%s,"artifact":"%s","sha256":"%s","manifest":"%s"}\n' \
-    "$SKYLIGHT_VERSION" "$FINGERPRINT" "$COMMIT" "$DIRTY" "$resumed" "$((SECONDS - START_SECONDS))" "$PUBLISHED" "$sha" "$MANIFEST"
+  python3 - "$SKYLIGHT_VERSION" "$FINGERPRINT" "$COMMIT" "$DIRTY" "$resumed" \
+    "$((SECONDS - START_SECONDS))" "$PUBLISHED" "$sha" "$MANIFEST" <<'PY'
+import json
+import sys
+
+version, fingerprint, commit, dirty, resumed, elapsed, artifact, checksum, manifest = sys.argv[1:]
+print(json.dumps({
+    "status": "complete",
+    "version": version,
+    "fingerprint": fingerprint,
+    "commit": commit,
+    "dirty": dirty == "true",
+    "resumed": resumed == "true",
+    "elapsedSeconds": int(elapsed),
+    "artifact": artifact,
+    "sha256": checksum,
+    "manifest": manifest,
+}, separators=(",", ":")))
+PY
 }
 
 source "$DIR/release/common.sh"

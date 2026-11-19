@@ -98,11 +98,34 @@ grep -Fq 'xcrun --sdk macosx --show-sdk-path' "$SCRIPT" ||
   fail "system libcurl metadata is not derived from the selected macOS SDK"
 grep -Fq -- '--prefix=/usr/local --openssldir=/etc/ssl' "$SCRIPT" ||
   fail "OpenSSL embeds the temporary dependency prefix"
-grep -Fq 'CMAKE_C_FLAGS=-ffile-prefix-map=' "$PACKAGE_SCRIPT" ||
+grep -Fq -- '-DSKYLIGHT_MAP_SOURCE_PATHS=ON' "$PACKAGE_SCRIPT" ||
   fail "release C paths are not reproducibly remapped"
 grep -Fq -- '-debug-prefix-map' "$PACKAGE_SCRIPT" ||
   fail "release Swift paths are not reproducibly remapped"
 grep -Fq 'HOST_BIN="$BUILD/sunshine"' "$PACKAGE_SCRIPT" ||
   fail "package script does not consume CMake's current host symlink"
+
+spaced_source="$WORK/source with a space"
+mkdir "$spaced_source"
+spaced_source="$(cd "$spaced_source" && pwd -P)"
+cat > "$spaced_source/CMakeLists.txt" <<'CMAKE'
+cmake_minimum_required(VERSION 3.22)
+project(SourcePathTest LANGUAGES C)
+include("${MOONWALK_OPTIONS}")
+add_executable(source_path main.c)
+CMAKE
+cat > "$spaced_source/main.c" <<'C'
+#include <stdio.h>
+
+int main(void) {
+  puts(__FILE__);
+  return 0;
+}
+C
+cmake -S "$spaced_source" -B "$spaced_source/build" -DSKYLIGHT_MAP_SOURCE_PATHS=ON \
+  "-DMOONWALK_OPTIONS=$REPO/cmake/prep/options.cmake" > "$WORK/cmake-path.log" 2>&1 || { cat "$WORK/cmake-path.log"; fail "spaced source would not configure"; }
+cmake --build "$spaced_source/build" --verbose >> "$WORK/cmake-path.log" 2>&1 || { cat "$WORK/cmake-path.log"; fail "spaced source would not compile"; }
+mapped_source="$("$spaced_source/build/source_path")"
+case "$mapped_source" in ./main.c|main.c) ;; *) tail -n 12 "$WORK/cmake-path.log"; fail "source path was not remapped: $mapped_source" ;; esac
 
 echo "PASS: release dependency sources are pinned and verified"

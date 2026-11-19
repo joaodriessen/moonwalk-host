@@ -12,6 +12,14 @@ option(NPM_OFFLINE "Use offline npm packages. You must ensure packages are in yo
 
 option(BUILD_WERROR "Enable -Werror flag." OFF)
 
+option(SKYLIGHT_MAP_SOURCE_PATHS "Remove the checkout path from compiled file references." OFF)
+if(SKYLIGHT_MAP_SOURCE_PATHS)
+    add_compile_options(
+        "$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-ffile-prefix-map=${CMAKE_SOURCE_DIR}=.>"
+        "$<$<COMPILE_LANGUAGE:C,CXX,OBJC,OBJCXX>:-fmacro-prefix-map=${CMAKE_SOURCE_DIR}=.>"
+    )
+endif()
+
 # Use ccache to speed up rebuilds if it's installed; a no-op otherwise.
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
