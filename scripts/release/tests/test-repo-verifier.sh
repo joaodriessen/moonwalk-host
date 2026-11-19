@@ -5,18 +5,11 @@ SOURCE_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 REPO="$WORK/repo"
-mkdir -p "$REPO/scripts/release" "$REPO/docs" "$REPO/macos-dist" "$REPO/patches" \
-  "$REPO/.github/ISSUE_TEMPLATE" "$REPO/.github/workflows"
-cp "$SOURCE_REPO/scripts/release/verify-artifact.sh" "$REPO/scripts/release/"
-cp "$SOURCE_REPO/README.md" "$SOURCE_REPO/CONTRIBUTING.md" "$SOURCE_REPO/SECURITY.md" "$SOURCE_REPO/CHANGELOG.md" \
-  "$SOURCE_REPO/LICENSE" "$SOURCE_REPO/NOTICE" "$REPO/"
-cp "$SOURCE_REPO/docs/"*.md "$REPO/docs/"
-cp -R "$SOURCE_REPO/docs/guides" "$REPO/docs/guides"
-cp -R "$SOURCE_REPO/docs/assets" "$REPO/docs/assets"
-cp "$SOURCE_REPO/.github/ISSUE_TEMPLATE/"*.yml "$REPO/.github/ISSUE_TEMPLATE/"
-cp "$SOURCE_REPO/.github/workflows/build.yml" "$REPO/.github/workflows/"
-cp "$SOURCE_REPO/macos-dist/README.md" "$REPO/macos-dist/"
-cp "$SOURCE_REPO/patches/README.md" "$REPO/patches/"
+mkdir "$REPO"
+# Release documents link to files elsewhere in the source tree.
+git -C "$SOURCE_REPO" ls-files -z |
+  tar -C "$SOURCE_REPO" --null -T - -cf - |
+  tar -C "$REPO" -xf -
 git -C "$REPO" init -q
 git -C "$REPO" add .
 
@@ -33,11 +26,11 @@ expect_failure() {
 verify
 mkdir -p "$REPO/local/.codex"
 printf 'synthetic fixture\n' > "$REPO/local/.codex/session.jsonl"
-git -C "$REPO" add local/.codex/session.jsonl
+git -C "$REPO" add -f local/.codex/session.jsonl
 expect_failure 'tracked private agent state' 'private local state must not be tracked'
 git -C "$REPO" rm -q -f local/.codex/session.jsonl
 printf 'synthetic fixture\n' > "$REPO/.env"
-git -C "$REPO" add .env
+git -C "$REPO" add -f .env
 expect_failure 'tracked environment credentials' 'private local state must not be tracked'
 git -C "$REPO" rm -q -f .env
 printf 'EXAMPLE=placeholder\n' > "$REPO/.env.example"
