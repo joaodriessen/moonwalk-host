@@ -126,21 +126,6 @@ function removeCmd(index) {
       </button>
     </div>
 
-    <!-- Notify Pre-Releases -->
-    <Checkbox class="mb-3"
-              id="notify_pre_releases"
-              locale-prefix="config"
-              v-model="config.notify_pre_releases"
-              default="false"
-    ></Checkbox>
-
-    <!-- Enable system tray -->
-    <Checkbox class="mb-3"
-              id="system_tray"
-              locale-prefix="config"
-              v-model="config.system_tray"
-              default="true"
-    ></Checkbox>
   </div>
 </template>
 
