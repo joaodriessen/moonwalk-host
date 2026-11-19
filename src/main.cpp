@@ -198,12 +198,6 @@ int main(int argc, char *argv[]) {
   // Log publisher metadata
   log_publisher_data();
 
-  // Log modified_config_settings
-  for (auto &[name, val] : config::modified_config_settings) {
-    BOOST_LOG(info) << "config: '"sv << name << "' = "sv << val;
-  }
-  config::modified_config_settings.clear();
-
   // Seed the live `display_cursor` global (src/globals.h) from the configured initial value.
   // This only sets the STARTING state -- the SkylightMenu XPC hide-cursor toggle
   // (src/platform/macos/xpc_control.mm setHideCursor:) still flips the same global at runtime

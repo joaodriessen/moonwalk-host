@@ -10,7 +10,8 @@
 - Pointed the web settings page to Moonwalk Host releases and source instead of
   offering unrelated Sunshine updates.
 - Removed request headers and parameters from daemon debug logging and improved
-  redaction when exporting older logs.
+  redaction when exporting older logs. Startup also keeps configuration values
+  such as display names and hook commands out of the log.
 - Include the native and web dependency licenses in the installer and
   document where to get their exact source revisions.
 - Staple the app’s notarization ticket before packaging it and verify the app
