@@ -54,7 +54,7 @@
 </template>
 
 <script>
-import { Home, Lock, Layers, Settings, Shield, Info } from 'lucide-vue-next'
+import { Home, Lock, Layers, Settings, Shield, Info } from '@lucide/vue'
 import ThemeToggle from './ThemeToggle.vue'
 
 export default {

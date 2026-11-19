@@ -30,7 +30,7 @@ python3 scripts/check-privacy.py
 
 Generate the local identity with `bash macos-dist/generate-identity.sh` before building the Swift package by itself. For C++, configure with `-DBUILD_TESTS=ON`, build the `test_sunshine` target and run the binary under `build/tests/`. CI runs it with a temporary configuration directory and excludes fixtures that move the pointer, capture audio or exercise real encoders. Use a dedicated Mac for those cases and for live session tests.
 
-To check the optional web settings in a browser, use Node.js 22 or newer and
+To check the optional web settings in a browser, use Node.js 22.12 or newer and
 Firefox. Set `FIREFOX` to the browser executable if it is outside your `PATH`.
 The test serves the compiled pages on loopback, opens a temporary browser
 profile, and uses example settings. It never connects to the host service.
