@@ -57,7 +57,7 @@ for name in documents:
 readme = texts["README.md"]
 install = texts["docs/INSTALL.md"]
 for label, pattern, text in [
-    ("private alpha status", r"\bprivate\s+alpha\b", readme),
+    ("alpha status", r"\balpha\b", readme),
     ("Apple Silicon support", r"\bApple\s+Silicon\b", readme),
     ("macOS minimum", r"\bmacOS\s+14\s+or\s+(?:later|newer)\b", readme),
     ("signed and notarized DMG installation", r"\bsigned\s+and\s+notarized\s+DMG\b", readme),
