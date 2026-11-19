@@ -42,3 +42,34 @@ import Testing
     #expect(output.contains("sunshine_name"))
     #expect(output.contains("1280x720 @ 60 fps"))
 }
+
+@Test func removesCompressedAndScopedAddressesWithoutChangingTimings() {
+    let input = """
+    Connect [fe80::abcd%en0]:47984 ff02::fb 2001:db8:: ::ffff:192.0.2.7 ::1
+    Last address was fe80::def0.
+    Measured 12.5 ms at 12:34:56
+    """
+    let output = DiagnosticRedactor.redact(input)
+    for address in ["fe80", "en0", "ff02", "2001:db8", "::ffff", "192.0.2.7", "::1"] {
+        #expect(!output.contains(address))
+    }
+    #expect(output.contains("[REDACTED_IP]:47984"))
+    #expect(output.contains("[REDACTED_IP]."))
+    #expect(output.contains("12.5 ms at 12:34:56"))
+    #expect(DiagnosticRedactor.redact(output) == output)
+}
+
+@Test func removesPartialCertificatesAndOlderRequestUrls() {
+    let first = """
+    response remainder
+    -----END CERTIFICATE-----
+    Request https://example:example-credentials@host.invalid:47984/pair?token=example-token
+    -----BEGIN PRIVATE KEY-----
+    incomplete fixture
+    """
+    let output = DiagnosticRedactor.redact(first)
+    for value in ["response remainder", "example-credentials", "example-token", "incomplete fixture"] {
+        #expect(!output.contains(value))
+    }
+    #expect(output.contains("host.invalid:47984/pair"))
+}
