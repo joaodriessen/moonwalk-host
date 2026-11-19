@@ -49,8 +49,19 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [ -L "$repo/build/release-deps" ]; then
   mkdir -p "$repo/build/release-deps/fixture"
 fi
-mkdir -p "$app/Contents/MacOS"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Helpers"
 printf 'signed-app\n' > "$app/Contents/MacOS/Skylight"
+source "$repo/macos-dist/skylight-identity.conf"
+version_commit="$COMMIT"
+if [ "${SKYLIGHT_FAKE_WRONG_SOURCE:-0}" = 1 ]; then
+  version_commit=0123456789abcdef0123456789abcdef01234567
+fi
+cat > "$app/Contents/Resources/Helpers/Skylight" <<CLI
+#!/bin/bash
+test "\$1" = --version || exit 64
+echo "Moonwalk Host $SKYLIGHT_VERSION source $version_commit"
+CLI
+chmod +x "$app/Contents/Resources/Helpers/Skylight"
 count_file="${SKYLIGHT_FAKE_COUNTS:?}/package"
 count=0; [ ! -f "$count_file" ] || count="$(cat "$count_file")"
 echo $((count + 1)) > "$count_file"
@@ -230,6 +241,18 @@ if (cd "$REPO" && PATH="$WORK/failbin:$PATH" scripts/release.sh \
   fail "publication succeeded when its copy failed"
 fi
 [ "$(shasum -a 256 "$published" | awk '{print $1}')" = "$published_before" ] || fail "failed publication damaged the previous artifact"
+
+wrong_identity_before="$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")"
+if (cd "$REPO" && SKYLIGHT_FAKE_WRONG_SOURCE=1 scripts/release.sh \
+  --identity test --notary-profile test --quiet) >"$WORK/out" 2>&1; then
+  fail "a daemon from a different source revision was accepted"
+fi
+grep -Fq "packaged daemon does not match the release version and source revision" "$WORK/out" ||
+  fail "daemon identity mismatch error is unclear"
+[ "$(cat "$SKYLIGHT_FAKE_COUNTS/notarize-app")" = "$wrong_identity_before" ] ||
+  fail "the mismatched daemon reached notarization"
+[ "$(shasum -a 256 "$published" | awk '{print $1}')" = "$published_before" ] ||
+  fail "the mismatched daemon replaced the previous artifact"
 
 export SKYLIGHT_FAKE_MUTATE_SOURCE=1
 if (cd "$REPO" && scripts/release.sh --identity test --notary-profile test --quiet) >"$WORK/out" 2>&1; then

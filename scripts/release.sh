@@ -141,6 +141,16 @@ assert_source_unchanged() {
   fi
 }
 
+verify_app_identity() {
+  local identity
+  identity="$("$APP/Contents/Resources/Helpers/Skylight" --version)" || return 1
+  if [ "$identity" != "Moonwalk Host $SKYLIGHT_VERSION source $COMMIT" ]; then
+    echo "ERROR: packaged daemon does not match the release version and source revision" >&2
+    return 1
+  fi
+  printf '%s\n' "$identity"
+}
+
 validate_complete() {
   [ -f "$MANIFEST" ] && [ -d "$APP" ] && [ -f "$DMG" ] || return 1
   [ "$(plutil -extract status raw -o - "$MANIFEST" 2>/dev/null)" = complete ] || return 1
@@ -153,6 +163,7 @@ validate_complete() {
   actual_app="$(release_app_digest "$APP")"
   [ "$expected_app" = "$actual_app" ] || return 1
   "$DIR/release/verify-artifact.sh" --team-id "$TEAM_ID" "$APP" >/dev/null 2>&1 || return 1
+  verify_app_identity >/dev/null 2>&1 || return 1
   xcrun stapler validate "$APP" >/dev/null 2>&1 || return 1
   xcrun stapler validate "$DMG" >/dev/null 2>&1 || return 1
   spctl --assess --type execute "$APP" >/dev/null 2>&1 || return 1
@@ -268,7 +279,8 @@ fi
 if [ "$RESUME" -eq 1 ] && [ -f "$CANDIDATE/build.complete" ] && [ -f "$CANDIDATE/build-app.sha256" ] && \
    { stapled_app_is_valid ||
      [ "$(cat "$CANDIDATE/build-app.sha256")" = "$(release_app_digest "$APP" 2>/dev/null || true)" ]; } && \
-   "$DIR/release/verify-artifact.sh" --team-id "$TEAM_ID" "$APP" >/dev/null 2>&1; then
+   "$DIR/release/verify-artifact.sh" --team-id "$TEAM_ID" "$APP" >/dev/null 2>&1 && \
+   verify_app_identity >/dev/null 2>&1; then
   [ "$QUIET" -eq 1 ] || echo "build        reused"
 else
   unlink "$STAPLED_DIGEST" 2>/dev/null || true
@@ -297,6 +309,7 @@ else
 fi
 
 stage source assert_source_unchanged
+stage identity verify_app_identity
 SUBMITTED_APP_SHA="$(cat "$CANDIDATE/build-app.sha256")"
 if [ "$RESUME" -eq 1 ] && stapled_app_is_valid; then
   [ "$QUIET" -eq 1 ] || echo "notarize-app reused"
