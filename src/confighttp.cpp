@@ -54,6 +54,15 @@ namespace confighttp {
   namespace fs = std::filesystem;
 
   namespace {
+    const fs::path &web_directory() {
+      static const auto directory = file_handler::assets_directory() / "web";
+      return directory;
+    }
+
+    std::string read_web_file(std::string_view filename) {
+      return file_handler::read_file((web_directory() / filename).string().c_str());
+    }
+
     // Simple per-IP failed-login throttle. Not a full security control, just
     // enough friction to slow down unattended Basic-Auth guessing over the LAN.
     constexpr int LOGIN_MAX_FAILURES = 5;
@@ -490,9 +499,10 @@ namespace confighttp {
    */
   const std::optional<nlohmann::json> &get_config_schema() {
     static const std::optional<nlohmann::json> schema = [] {
-      auto loaded = config_validate::load_schema(WEB_DIR "config_schema.json");
+      const auto schema_path = web_directory() / "config_schema.json";
+      auto loaded = config_validate::load_schema(schema_path.string());
       if (!loaded) {
-        BOOST_LOG(error) << "confighttp: could not load "sv << WEB_DIR "config_schema.json"
+        BOOST_LOG(error) << "confighttp: could not load "sv << schema_path
                           << " -- saveConfig will skip schema validation and configSchema will 404"sv;
       }
       return loaded;
@@ -569,7 +579,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = file_handler::read_file(WEB_DIR "index.html");
+    std::string content = read_web_file("index.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -597,7 +607,7 @@ namespace confighttp {
     // what this makes eligible and why an unauthenticated caller can never reach this.
     nvhttp::arm_pairing_window();
 
-    std::string content = file_handler::read_file(WEB_DIR "pin.html");
+    std::string content = read_web_file("pin.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -617,7 +627,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = file_handler::read_file(WEB_DIR "apps.html");
+    std::string content = read_web_file("apps.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -638,7 +648,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = file_handler::read_file(WEB_DIR "config.html");
+    std::string content = read_web_file("config.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -658,7 +668,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = file_handler::read_file(WEB_DIR "password.html");
+    std::string content = read_web_file("password.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -677,7 +687,7 @@ namespace confighttp {
       send_redirect(response, request, "/");
       return;
     }
-    std::string content = file_handler::read_file(WEB_DIR "welcome.html");
+    std::string content = read_web_file("welcome.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -697,7 +707,7 @@ namespace confighttp {
 
     print_req(request);
 
-    std::string content = file_handler::read_file(WEB_DIR "troubleshooting.html");
+    std::string content = read_web_file("troubleshooting.html");
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "text/html; charset=utf-8");
     headers.emplace("X-Frame-Options", "DENY");
@@ -715,7 +725,7 @@ namespace confighttp {
   void getFaviconImage(resp_https_t response, req_https_t request) {
     print_req(request);
 
-    std::ifstream in(WEB_DIR "images/sunshine.ico", std::ios::binary);
+    std::ifstream in(web_directory() / "images/sunshine.ico", std::ios::binary);
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "image/x-icon");
     headers.emplace("X-Frame-Options", "DENY");
@@ -733,7 +743,7 @@ namespace confighttp {
   void getSunshineLogoImage(resp_https_t response, req_https_t request) {
     print_req(request);
 
-    std::ifstream in(WEB_DIR "images/logo-sunshine-45.png", std::ios::binary);
+    std::ifstream in(web_directory() / "images/logo-sunshine-45.png", std::ios::binary);
     SimpleWeb::CaseInsensitiveMultimap headers;
     headers.emplace("Content-Type", "image/png");
     headers.emplace("X-Frame-Options", "DENY");
@@ -747,9 +757,10 @@ namespace confighttp {
    * @param query The path to check.
    * @return True if the path is a child of the base path, false otherwise.
    */
-  bool isChildPath(fs::path const &base, fs::path const &query) {
-    auto relPath = fs::relative(base, query);
-    return *(relPath.begin()) != fs::path("..");
+  bool isChildPath(const fs::path &base, const fs::path &query) {
+    std::error_code error;
+    const auto relative = fs::relative(query, base, error);
+    return !error && !relative.empty() && !relative.is_absolute() && *relative.begin() != "..";
   }
 
   /**
@@ -759,27 +770,26 @@ namespace confighttp {
    */
   void getNodeModules(resp_https_t response, req_https_t request) {
     print_req(request);
-    fs::path webDirPath(WEB_DIR);
-    fs::path nodeModulesPath(webDirPath / "assets");
+    const auto &webDirPath = web_directory();
+    const auto nodeModulesPath = webDirPath / "assets";
 
     // .relative_path is needed to shed any leading slash that might exist in the request path
-    auto filePath = fs::weakly_canonical(webDirPath / fs::path(request->path).relative_path());
+    std::error_code error;
+    const auto filePath = fs::weakly_canonical(webDirPath / fs::path(request->path).relative_path(), error);
 
     // Don't do anything if file does not exist or is outside the assets directory
-    if (!isChildPath(filePath, nodeModulesPath)) {
-      BOOST_LOG(warning) << "Someone requested a path " << filePath << " that is outside the assets folder";
+    if (error || !isChildPath(nodeModulesPath, filePath)) {
+      BOOST_LOG(warning) << "Browser requested an asset outside the packaged asset directory";
       bad_request(response, request);
       return;
     }
-    if (!fs::exists(filePath)) {
+    if (!fs::is_regular_file(filePath, error)) {
       not_found(response, request);
       return;
     }
 
-    auto relPath = fs::relative(filePath, webDirPath);
-    // get the mime type from the file extension mime_types map
-    // remove the leading period from the extension
-    auto mimeType = mime_types.find(relPath.extension().string().substr(1));
+    const auto extension = filePath.extension().string();
+    const auto mimeType = extension.empty() ? mime_types.end() : mime_types.find(extension.substr(1));
     // check if the extension is in the map at the x position
     if (mimeType == mime_types.end()) {
       bad_request(response, request);
@@ -1520,7 +1530,7 @@ namespace confighttp {
       std::string validated_path = proc::validate_app_image_path(app_image_path);
 
       // Check if we got the default image path (means validation failed or no image configured)
-      if (validated_path == DEFAULT_APP_IMAGE_PATH) {
+      if (validated_path == proc::default_app_image_path()) {
         BOOST_LOG(debug) << "Application at index " << index << " does not have a valid cover image";
         not_found(response, request, "Cover image not found");
         return;

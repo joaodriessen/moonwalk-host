@@ -176,13 +176,13 @@ TEST_F(ProcessPNGTest, CheckValidPNG_PartialSignature) {
 TEST_F(ProcessPNGTest, ValidateAppImagePath_EmptyPath) {
   // Empty path should return default
   const std::string result = proc::validate_app_image_path("");
-  EXPECT_EQ(result, DEFAULT_APP_IMAGE_PATH);
+  EXPECT_EQ(result, proc::default_app_image_path());
 }
 
 TEST_F(ProcessPNGTest, ValidateAppImagePath_NonPNGExtension) {
   // Non-PNG extension should return default
   const std::string result = proc::validate_app_image_path("image.jpg");
-  EXPECT_EQ(result, DEFAULT_APP_IMAGE_PATH);
+  EXPECT_EQ(result, proc::default_app_image_path());
 }
 
 TEST_F(ProcessPNGTest, ValidateAppImagePath_CaseInsensitiveExtension) {
@@ -212,13 +212,13 @@ TEST_F(ProcessPNGTest, ValidateAppImagePath_CaseInsensitiveExtension) {
 
   const std::string result = proc::validate_app_image_path(test_file.string());
   // Should accept uppercase .PNG extension
-  EXPECT_NE(result, DEFAULT_APP_IMAGE_PATH);
+  EXPECT_NE(result, proc::default_app_image_path());
 }
 
 TEST_F(ProcessPNGTest, ValidateAppImagePath_NonExistentFile) {
   // Non-existent PNG file should return default
   const std::string result = proc::validate_app_image_path("/nonexistent/path/image.png");
-  EXPECT_EQ(result, DEFAULT_APP_IMAGE_PATH);
+  EXPECT_EQ(result, proc::default_app_image_path());
 }
 
 TEST_F(ProcessPNGTest, ValidateAppImagePath_InvalidPNGSignature) {
@@ -238,7 +238,7 @@ TEST_F(ProcessPNGTest, ValidateAppImagePath_InvalidPNGSignature) {
   createTestFile(test_file, invalid_data);
 
   const std::string result = proc::validate_app_image_path(test_file.string());
-  EXPECT_EQ(result, DEFAULT_APP_IMAGE_PATH);
+  EXPECT_EQ(result, proc::default_app_image_path());
 }
 
 TEST_F(ProcessPNGTest, ValidateAppImagePath_ValidPNG) {

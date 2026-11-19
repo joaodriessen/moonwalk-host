@@ -5,6 +5,7 @@
 #pragma once
 
 // standard includes
+#include <filesystem>
 #include <string>
 
 /**
@@ -12,6 +13,11 @@
  */
 namespace file_handler {
   enum class file_access { preserve, owner_only };
+
+  // An empty result means the executable is outside a macOS application bundle.
+  std::filesystem::path bundle_resources(const std::filesystem::path &executable);
+  const std::filesystem::path &running_bundle_resources();
+  const std::filesystem::path &assets_directory();
 
   /**
    * @brief Get the parent directory of a file or directory.

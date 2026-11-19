@@ -5,11 +5,16 @@
 
 // standard includes
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <thread>
+#ifdef __APPLE__
+  #include <mach-o/dyld.h>
+  #include <vector>
+#endif
 #ifndef _WIN32
   #include <fcntl.h>
   #include <sys/stat.h>
@@ -21,6 +26,42 @@
 #include "logging.h"
 
 namespace file_handler {
+  std::filesystem::path bundle_resources(const std::filesystem::path &executable) {
+    auto ancestor = executable.parent_path();
+    while (!ancestor.empty() && ancestor != ancestor.root_path()) {
+      if (ancestor.filename() == "Contents" && ancestor.parent_path().extension() == ".app") {
+        return ancestor / "Resources";
+      }
+      ancestor = ancestor.parent_path();
+    }
+    return {};
+  }
+
+  const std::filesystem::path &running_bundle_resources() {
+    static const auto directory = []() -> std::filesystem::path {
+#ifdef __APPLE__
+      std::uint32_t size = 0;
+      (void) _NSGetExecutablePath(nullptr, &size);
+      std::vector<char> path(size);
+      if (_NSGetExecutablePath(path.data(), &size) == 0) {
+        std::error_code error;
+        const auto canonical = std::filesystem::canonical(path.data(), error);
+        return bundle_resources(error ? std::filesystem::path {path.data()} : canonical);
+      }
+#endif
+      return {};
+    }();
+    return directory;
+  }
+
+  const std::filesystem::path &assets_directory() {
+    static const auto directory = [] {
+      const auto &resources = running_bundle_resources();
+      return resources.empty() ? std::filesystem::path {SUNSHINE_ASSETS_DIR} : resources / "assets";
+    }();
+    return directory;
+  }
+
   std::string get_parent_directory(const std::string &path) {
     // remove any trailing path separators
     std::string trimmed_path = path;

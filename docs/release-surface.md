@@ -1,6 +1,6 @@
 # What goes in the app bundle
 
-The downloadable app is assembled by `scripts/package-release.sh`. Finder calls it **Moonwalk Host**. The filesystem name is `Skylight.app`. Install it in `/Applications`, where the daemon expects to find its packaged assets.
+The downloadable app is assembled by `scripts/package-release.sh`. Finder calls it **Moonwalk Host**. The filesystem name is `Skylight.app`. Install it in `/Applications` and keep that filename for upgrades. The daemon loads the assets shipped in its own bundle.
 
 | Bundle location | Purpose |
 | --- | --- |

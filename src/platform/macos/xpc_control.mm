@@ -12,7 +12,6 @@
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
-#include <mach-o/dyld.h>
 #import <objc/runtime.h>
 
 // standard includes
@@ -449,19 +448,9 @@ namespace {
   }
 
   /**
-   * @brief Load and cache `config_schema.json` for the S2 schema-driven long-tail surface.
-   *
-   * Read from the same assets tree `confighttp.cpp` serves the schema (and the rest of the web
-   * UI) out of -- `WEB_DIR` (`src/confighttp.h`, `SUNSHINE_ASSETS_DIR "/web/"`) -- via the exact
-   * same `config_validate::load_schema()` helper `confighttp.cpp`'s own `get_config_schema()`
-   * uses, so there is one schema-loading implementation, not a second one reimplemented here.
-   * The two caches cannot literally share one `static` (this is a different translation unit,
-   * and `confighttp.cpp`'s cache is private to an anonymous namespace there), but both read the
-   * identical file through the identical loader, so there is no risk of the two ever disagreeing
-   * about what's in it. Cached once per process lifetime; a missing/corrupt file is logged once
-   * and cached as `std::nullopt` so `getConfigSchemaWithReply:` can return `""` (the app shows a
-   * graceful "schema unavailable" state) and `setConfigValue:value:reply:` can reject every write
-   * rather than silently skip validation.
+   * @brief Load and cache the settings schema from the daemon’s own bundle.
+   * The browser loads the copy shipped with its assets. Both copies are generated
+   * from the same source in the package build.
    */
   const std::optional<nlohmann::json> &GetCachedConfigSchema() {
     static const std::optional<nlohmann::json> schema = [] {
@@ -471,16 +460,8 @@ namespace {
       const std::vector<std::filesystem::path> candidates {
         std::filesystem::path {SUNSHINE_TEST_BIN_DIR} / "src_assets/common/assets/web/config_schema.json"};
 #else
-      std::uint32_t executable_path_size = 0;
-      (void) _NSGetExecutablePath(nullptr, &executable_path_size);
-      std::vector<char> executable_path_buffer(executable_path_size);
-      std::filesystem::path executable_path;
-      if (_NSGetExecutablePath(executable_path_buffer.data(), &executable_path_size) == 0) {
-        executable_path = executable_path_buffer.data();
-      }
-
       const auto candidates = platf::macos::config_schema_candidates(
-        executable_path, std::filesystem::path {WEB_DIR "config_schema.json"});
+        file_handler::running_bundle_resources(), std::filesystem::path {WEB_DIR "config_schema.json"});
 #endif
       for (const auto &candidate : candidates) {
         if (auto loaded = config_validate::load_schema(candidate.string())) {
@@ -1648,21 +1629,10 @@ namespace {
 namespace platf::macos {
 
   std::vector<std::filesystem::path> config_schema_candidates(
-    const std::filesystem::path &executable_path,
+    const std::filesystem::path &bundle_resources,
     const std::filesystem::path &configured_schema_path) {
-    std::vector<std::filesystem::path> candidates;
-    auto ancestor = executable_path.parent_path();
-    while (!ancestor.empty() && ancestor != ancestor.root_path()) {
-      if (ancestor.filename() == "Contents" && ancestor.parent_path().extension() == ".app") {
-        candidates.push_back(ancestor / "Resources/config_schema.json");
-        break;
-      }
-      ancestor = ancestor.parent_path();
-    }
-    if (candidates.empty() || candidates.front() != configured_schema_path) {
-      candidates.push_back(configured_schema_path);
-    }
-    return candidates;
+    if (bundle_resources.empty()) return {configured_schema_path};
+    return {bundle_resources / "config_schema.json", bundle_resources / "assets/web/config_schema.json"};
   }
 
   void start_xpc_control_service() {

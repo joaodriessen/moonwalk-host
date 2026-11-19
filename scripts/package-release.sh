@@ -159,9 +159,8 @@ sed \
   "$REPO/macos-dist/launch-agents/io.github.joaodriessen.skylight.daemon.plist.in" \
   > "$APP/Contents/Library/LaunchAgents/$SKYLIGHT_LAUNCH_AGENT_PLIST_NAME"
 
-# The app is called Moonwalk Host, but the bundle stays Skylight.app: the daemon bakes
-# /Applications/Skylight.app into its asset path, and installs, rollbacks and macOS's records of
-# the background service all know it by that path. Finder, Launchpad and Spotlight show the
+# Keep the existing bundle filename for upgrades, rollbacks and macOS's background service
+# registration. Finder, Launchpad and Spotlight show the
 # localized name instead, which they only do when the plain CFBundleDisplayName matches the
 # file name, so that stays Skylight and en.lproj carries Moonwalk Host.
 mkdir -p "$APP/Contents/Resources/en.lproj"

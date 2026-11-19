@@ -15,12 +15,11 @@ namespace platf::macos {
   /**
    * @brief Return config-schema paths in production lookup order.
    *
-   * An installed daemon prefers the schema sealed inside its enclosing `.app`; development
-   * and non-bundle runs use the configured build-assets path. Pure and exposed for regression
-   * tests so production never silently regains a dependency on a temporary build directory.
+   * An installed daemon reads the schema inside its enclosing `.app`; development and
+   * non-bundle runs use the configured build-assets path.
    */
   std::vector<std::filesystem::path> config_schema_candidates(
-    const std::filesystem::path &executable_path,
+    const std::filesystem::path &bundle_resources,
     const std::filesystem::path &configured_schema_path);
 
   /**
