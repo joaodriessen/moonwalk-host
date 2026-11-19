@@ -346,3 +346,34 @@ TEST_F(ProcPrepCmdTest, UndoRunsOnlyForSucceededCmds) {
   EXPECT_TRUE(fs::exists(marker)) << "the undo for the succeeded first cmd must have run";
   EXPECT_EQ(test_proc.running(), 0) << "a failed launch must leave proc_t retryable (no stuck app_id)";
 }
+
+TEST_F(ProcPrepCmdTest, RefreshApplicationsKeepsTheRunningTarget) {
+  const auto path = (test_dir / "apps.json").string();
+  auto cleanup = util::fail_guard([] {
+    proc::proc.terminate();
+    proc::proc = proc::proc_t {};
+  });
+
+  std::ofstream(path) << R"({"env": {}, "apps": [{"name": "First Desktop"}]})";
+  proc::refresh(path);
+  const auto original = proc::proc.get_apps();
+  ASSERT_EQ(original.size(), 1);
+  const auto running = std::stoi(original.front().id);
+  ASSERT_EQ(proc::proc.execute(running, make_session()), 0);
+  ASSERT_EQ(proc::current_target_id(), running);
+
+  std::ofstream(path) << R"({"env": {}, "apps": [{"name": "Second Desktop"}]})";
+  proc::refresh(path);
+
+  const auto updated = proc::proc.get_apps();
+  ASSERT_EQ(updated.size(), 1);
+  EXPECT_EQ(updated.front().name, "Second Desktop");
+  EXPECT_EQ(proc::current_target_id(), running);
+  EXPECT_EQ(proc::proc.running(), running);
+  EXPECT_EQ(proc::proc.get_last_run_app_name(), "First Desktop");
+
+  proc::proc.terminate();
+  EXPECT_EQ(proc::current_target_id(), 0);
+  EXPECT_EQ(proc::proc.execute(std::stoi(updated.front().id), make_session()), 0);
+  EXPECT_EQ(proc::proc.get_last_run_app_name(), "Second Desktop");
+}

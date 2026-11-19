@@ -7,6 +7,7 @@
 // standard includes
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -45,6 +46,7 @@ namespace proc {
   namespace pt = boost::property_tree;
 
   static std::atomic<int> published_target_id {0};
+  static std::mutex catalog_mutex;
   proc_t proc;
 
   int current_target_id() { return published_target_id.load(std::memory_order_relaxed); }
@@ -143,17 +145,22 @@ namespace proc {
     // Ensure starting from a clean slate
     terminate();
 
-    auto iter = std::find_if(_apps.begin(), _apps.end(), [&app_id](const auto app) {
-      return app.id == std::to_string(app_id);
-    });
+    {
+      std::lock_guard lock(catalog_mutex);
+      const auto id = std::to_string(app_id);
+      auto iter = std::find_if(_apps.begin(), _apps.end(), [&](const auto &app) {
+        return app.id == id;
+      });
 
-    if (iter == _apps.end()) {
-      BOOST_LOG(error) << "Couldn't find app with ID ["sv << app_id << ']';
-      return 404;
+      if (iter == _apps.end()) {
+        BOOST_LOG(error) << "Couldn't find app with ID ["sv << app_id << ']';
+        return 404;
+      }
+      _app = *iter;
+      _env = _catalog_env;
     }
 
     _app_id = app_id;
-    _app = *iter;
     _app_prep_begin = std::begin(_app.prep_cmds);
     _app_prep_it = _app_prep_begin;
 
@@ -361,11 +368,8 @@ namespace proc {
     _app_id = -1;
   }
 
-  const std::vector<ctx_t> &proc_t::get_apps() const {
-    return _apps;
-  }
-
-  std::vector<ctx_t> &proc_t::get_apps() {
+  std::vector<ctx_t> proc_t::get_apps() const {
+    std::lock_guard lock(catalog_mutex);
     return _apps;
   }
 
@@ -374,10 +378,15 @@ namespace proc {
   // Returns default image if image configuration is not set.
   // Returns http content-type header compatible image type.
   std::string proc_t::get_app_image(int app_id) {
-    auto iter = std::find_if(_apps.begin(), _apps.end(), [&app_id](const auto app) {
-      return app.id == std::to_string(app_id);
-    });
-    auto app_image_path = iter == _apps.end() ? std::string() : iter->image_path;
+    std::string app_image_path;
+    {
+      std::lock_guard lock(catalog_mutex);
+      const auto id = std::to_string(app_id);
+      auto iter = std::find_if(_apps.begin(), _apps.end(), [&](const auto &app) {
+        return app.id == id;
+      });
+      if (iter != _apps.end()) app_image_path = iter->image_path;
+    }
 
     return validate_app_image_path(app_image_path);
   }
@@ -759,8 +768,11 @@ namespace proc {
     auto proc_opt = proc::parse(file_name);
 
     if (proc_opt) {
-      published_target_id.store(0, std::memory_order_relaxed);
-      proc = std::move(*proc_opt);
+      // A running target owns a copy of its launch settings, environment and
+      // undo commands. Replacing just the app list leaves that target intact.
+      std::lock_guard lock(catalog_mutex);
+      proc._catalog_env = std::move(proc_opt->_catalog_env);
+      proc._apps = std::move(proc_opt->_apps);
     }
   }
 }  // namespace proc

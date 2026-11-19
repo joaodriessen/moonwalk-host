@@ -154,12 +154,7 @@ namespace confighttp {
       login_throttle_map.erase(address);
     }
 
-    // CONCURRENCY: guards apps.json's read-modify-write (saveApp()/deleteApp()) against a second
-    // /api/apps request racing the first -- e.g. two open browser tabs, or a scripted double
-    // submit. Dedicated rather than reusing config::config_write_mutex() -- apps.json and
-    // sunshine.conf are different files with independent writers, and sharing one mutex would
-    // serialize them for no reason. Never taken re-entrantly: check_app_index() itself does not
-    // lock it, only the callers below that already hold it do, so there is no self-deadlock.
+    // Serialize browser changes to apps.json through the running list update.
     std::mutex apps_write_mutex;
   }  // namespace
 
@@ -1004,16 +999,10 @@ namespace confighttp {
         return;
       }
 
-      // CONCURRENCY: hold apps_write_mutex across the whole read-modify-write, including
-      // check_app_index()'s own (separate) read below, so its bounds check and this function's
-      // write always observe the same on-disk snapshot -- a racing saveApp/deleteApp can't slip a
-      // write in between the two reads and silently no-op this edit while still reporting success.
       {
         std::lock_guard<std::mutex> apps_lock(apps_write_mutex);
 
-        std::string file = file_handler::read_file(config::stream.file_apps.c_str());
-        BOOST_LOG(info) << file;
-        nlohmann::json file_tree = nlohmann::json::parse(file);
+        auto file_tree = nlohmann::json::parse(file_handler::read_file(config::stream.file_apps.c_str()));
 
         if (input_tree["prep-cmd"].empty()) {
           input_tree.erase("prep-cmd");
@@ -1055,7 +1044,10 @@ namespace confighttp {
           return a["name"].get<std::string>() < b["name"].get<std::string>();
         });
 
-        file_handler::write_file(config::stream.file_apps.c_str(), file_tree.dump(4));
+        if (!file_handler::write_file_atomic(config::stream.file_apps.c_str(), file_tree.dump(4))) {
+          bad_request(response, request, "failed to write application settings");
+          return;
+        }
         proc::refresh(config::stream.file_apps);
       }
 
@@ -1118,9 +1110,6 @@ namespace confighttp {
       nlohmann::json new_apps = nlohmann::json::array();
       const int index = std::stoi(request->path_match[1]);
 
-      // CONCURRENCY: see saveApp()'s equivalent lock -- holding apps_write_mutex across
-      // check_app_index()'s read and this function's own read-modify-write keeps both on the same
-      // on-disk snapshot, atomic against a racing saveApp/deleteApp.
       {
         std::lock_guard<std::mutex> apps_lock(apps_write_mutex);
 
@@ -1139,7 +1128,10 @@ namespace confighttp {
         }
         file_tree["apps"] = new_apps;
 
-        file_handler::write_file(config::stream.file_apps.c_str(), file_tree.dump(4));
+        if (!file_handler::write_file_atomic(config::stream.file_apps.c_str(), file_tree.dump(4))) {
+          bad_request(response, request, "failed to write application settings");
+          return;
+        }
         proc::refresh(config::stream.file_apps);
       }
 

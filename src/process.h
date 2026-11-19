@@ -78,7 +78,7 @@ namespace proc {
       std::vector<ctx_t> &&apps
     ):
         _app_id(0),
-        _env(std::move(env)),
+        _catalog_env(std::move(env)),
         _apps(std::move(apps)) {
     }
 
@@ -91,17 +91,19 @@ namespace proc {
 
     ~proc_t();
 
-    const std::vector<ctx_t> &get_apps() const;
-    std::vector<ctx_t> &get_apps();
+    std::vector<ctx_t> get_apps() const;
     std::string get_app_image(int app_id);
     std::string get_last_run_app_name();
     void terminate();
 
   private:
+    friend void refresh(const std::string &file_name);
+
     int _app_id;
 
-    boost::process::v1::environment _env;
+    boost::process::v1::environment _catalog_env;
     std::vector<ctx_t> _apps;
+    boost::process::v1::environment _env;
     ctx_t _app;
     std::chrono::steady_clock::time_point _app_launch_time;
 
