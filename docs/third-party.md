@@ -1,6 +1,6 @@
 # Third-party code and source
 
-Moonwalk Host includes code from [Sunshine](https://github.com/LizardByte/Sunshine) and [Lumen](https://github.com/trollzem/Lumen). The [source provenance](origin.md) identifies the import. See also the project [license](../LICENSE) and [notices](../NOTICE).
+Moonwalk Host includes code from [Sunshine](https://github.com/LizardByte/Sunshine) and [Lumen](https://github.com/lumaaaaaa/Lumen). The [source provenance](origin.md) identifies the import. See also the project [license](../LICENSE) and [notices](../NOTICE).
 
 ## Native dependencies
 

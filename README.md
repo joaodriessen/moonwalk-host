@@ -54,5 +54,5 @@ unencrypted by default. You can require encryption in Settings.
 [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
 
 Moonwalk Host builds on [Sunshine](https://github.com/LizardByte/Sunshine)
-and [Lumen](https://github.com/trollzem/Lumen).
+and [Lumen](https://github.com/lumaaaaaa/Lumen).
 [GPL-3.0-only](LICENSE) · [Third-party code](docs/third-party.md)
