@@ -138,6 +138,7 @@ if [ ! -f "$PREFIX/.opus-${OPUS_VERSION}-complete" ]; then
   # Opus's libtool installer splits prefixes containing spaces.
   cmake -S "$OPUS_SOURCE" -B "$BUILDS/opus" \
     -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="-ffile-prefix-map=\"$OPUS_SOURCE=opus-$OPUS_VERSION\"" \
     -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
