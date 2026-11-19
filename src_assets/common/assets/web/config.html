@@ -10,8 +10,12 @@
   <div class="container">
     <h1 class="my-4">{{ $t('config.configuration') }}</h1>
 
+    <div class="alert alert-danger" v-if="loadFailed" role="alert">
+      {{ $t('config.load_failed') }}
+    </div>
+    <p v-else-if="!config" role="status">{{ $t('_common.loading') }}</p>
     <!-- Search Bar with Autocomplete -->
-    <div class="mb-3">
+    <div class="mb-3" v-if="config">
       <div class="input-group">
         <span class="input-group-text">
           <search :size="18" class="icon"></search>
@@ -101,18 +105,25 @@
     </div>
 
     <!-- Save and Apply buttons -->
-    <div class="alert alert-success my-4" v-if="saved && !restarted">
-      <b>{{ $t('_common.success') }}</b> {{ $t('config.apply_note') }}
+    <div class="alert alert-success my-4" v-if="saved && restartResult === null" role="status">
+      {{ $t('config.settings_saved') }} {{ $t('config.apply_note') }}
     </div>
-    <div class="alert alert-success my-4" v-if="restarted">
-      <b>{{ $t('_common.success') }}</b> {{ $t('config.restart_note') }}
+    <div class="alert alert-success my-4" v-if="restartResult === true" role="status">
+      {{ $t('config.restart_accepted') }}
     </div>
-    <div class="mb-3 d-flex gap-2 mt-4">
-      <button class="btn btn-primary" @click="save">
+    <div class="alert alert-warning my-4" v-if="restartResult === false" role="alert">
+      {{ $t('config.settings_saved') }} {{ $t('_common.restart_unconfirmed') }}
+    </div>
+    <div class="alert alert-danger my-4" v-if="saveUnconfirmed" role="alert">
+      {{ $t('config.save_unconfirmed') }}
+    </div>
+    <div class="mb-3 d-flex gap-2 mt-4" v-if="config">
+      <button class="btn btn-primary" :disabled="actionPending" @click="save()">
         <save :size="18" class="icon"></save>
         {{ $t('_common.save') }}
       </button>
-      <button class="btn btn-success" @click="apply" v-if="saved && !restarted">
+      <button class="btn btn-success" :disabled="actionPending" @click="save(true)"
+        v-if="(saved || applying) && restartResult !== true">
         <check :size="18" class="icon"></check>
         {{ $t('_common.apply') }}
       </button>
@@ -124,6 +135,7 @@
 <script type="module">
   import { computed, createApp } from 'vue'
   import { initApp } from './init'
+  import { postSettings } from './post-settings'
   import Navbar from './Navbar.vue'
   import General from './configs/tabs/General.vue'
   import Inputs from './configs/tabs/Inputs.vue'
@@ -174,8 +186,12 @@
     data() {
       return {
         platform: "",
+        loadFailed: false,
+        actionPending: false,
+        applying: false,
         saved: false,
-        restarted: false,
+        saveUnconfirmed: false,
+        restartResult: null,
         config: null,
         currentTab: "general",
         searchQuery: "",
@@ -369,55 +385,57 @@
         );
       }
     },
-    created() {
-      fetch("./api/config")
-        .then((r) => r.json())
-        .then((r) => {
-          this.config = r;
-          this.platform = this.config.platform;
+    async created() {
+      try {
+        const response = await fetch("./api/config", { signal: AbortSignal.timeout(10000) });
+        if (!response.ok) throw new Error("Could not load configuration");
+        const config = await response.json();
+        if (config.status !== true || typeof config.platform !== "string") {
+          throw new Error("Invalid configuration response");
+        }
+        this.platform = config.platform;
+        for (const key of ["status", "platform", "version", "host_version", "source_revision"]) {
+          delete config[key];
+        }
+        if (this.platform === "windows") {
+          this.tabs = this.tabs.filter((el) => {
+            return el.id !== "vt" && el.id !== "vaapi";
+          });
+        }
+        if (this.platform === "freebsd" || this.platform === "linux") {
+          this.tabs = this.tabs.filter((el) => {
+            return el.id !== "amd" && el.id !== "qsv" && el.id !== "vt";
+          });
+        }
+        if (this.platform === "macos") {
+          this.tabs = this.tabs.filter((el) => {
+            return el.id !== "amd" && el.id !== "nv" && el.id !== "qsv" && el.id !== "vaapi";
+          });
+        }
 
-          var app = document.getElementById("app");
-          if (this.platform === "windows") {
-            this.tabs = this.tabs.filter((el) => {
-              return el.id !== "vt" && el.id !== "vaapi";
-            });
+        // TODO: let each tab's Component handle it's own data instead of doing it here
+
+        // Parse the special options before population if available
+        const specialOptions = ["dd_mode_remapping", "global_prep_cmd"]
+        for (const optionKey of specialOptions) {
+          if (Object.hasOwn(config, optionKey)) {
+            config[optionKey] = JSON.parse(config[optionKey]);
           }
-          if (this.platform === "freebsd" || this.platform === "linux") {
-            this.tabs = this.tabs.filter((el) => {
-              return el.id !== "amd" && el.id !== "qsv" && el.id !== "vt";
-            });
-          }
-          if (this.platform === "macos") {
-            this.tabs = this.tabs.filter((el) => {
-              return el.id !== "amd" && el.id !== "nv" && el.id !== "qsv" && el.id !== "vaapi";
-            });
-          }
+        }
 
-          // remove values we don't want in the config file
-          delete this.config.platform;
-          delete this.config.status;
-          delete this.config.version;
-
-          // TODO: let each tab's Component handle it's own data instead of doing it here
-
-          // Parse the special options before population if available
-          const specialOptions = ["dd_mode_remapping", "global_prep_cmd"]
-          for (const optionKey of specialOptions) {
-            if (this.config.hasOwnProperty(optionKey)) {
-              this.config[optionKey] = JSON.parse(this.config[optionKey]);
+        // Populate default values from tabs options
+        this.tabs.forEach(tab => {
+          Object.keys(tab.options).forEach(optionKey => {
+            if (!Object.hasOwn(config, optionKey)) {
+              // Make sure to copy by value
+              config[optionKey] = JSON.parse(JSON.stringify(tab.options[optionKey]));
             }
-          }
-
-          // Populate default values from tabs options
-          this.tabs.forEach(tab => {
-            Object.keys(tab.options).forEach(optionKey => {
-              if (this.config[optionKey] === undefined) {
-                // Make sure to copy by value
-                this.config[optionKey] = JSON.parse(JSON.stringify(tab.options[optionKey]));
-              }
-            });
           });
         });
+        this.config = config;
+      } catch {
+        this.loadFailed = true;
+      }
     },
     methods: {
       getTabIcon(tabId) {
@@ -443,63 +461,30 @@
       serialize() {
         return JSON.parse(JSON.stringify(this.config));
       },
-      save() {
+      async save(apply = false) {
+        if (this.actionPending || !this.config) return;
+        this.actionPending = true;
+        this.applying = apply;
+        this.saveUnconfirmed = false;
         this.saved = false;
-        this.restarted = false;
-
-        // create a temp copy of this.config to use for the post request
-        let config = this.serialize();
-
-        // delete default values from this.config
-        this.tabs.forEach(tab => {
-          Object.keys(tab.options).forEach(optionKey => {
-            let delete_value = false
-
-            // todo: add proper type checking
-            if (JSON.stringify(config[optionKey]) === JSON.stringify(tab.options[optionKey])) {
-              delete_value = true
-            }
-
-            if (delete_value) {
-              delete config[optionKey]
-            }
-          });
-        });
-
-        return fetch("./api/config", {
-          method: "POST",
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(config),
-        }).then((r) => {
-          if (r.status === 200) {
-            this.saved = true
-            return this.saved
-          }
-          else {
-            return false
-          }
-        });
-      },
-      apply() {
-        this.saved = this.restarted = false;
-        let saved = this.save();
-
-        saved.then((result) => {
-          if (result === true) {
-            this.restarted = true;
-            setTimeout(() => {
-              this.saved = this.restarted = false;
-            }, 5000);
-            fetch("./api/restart", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json"
+        this.restartResult = null;
+        try {
+          const config = this.serialize();
+          // Leave default values to the host instead of writing them into the file.
+          for (const { options } of this.tabs) {
+            for (const [key, value] of Object.entries(options)) {
+              if (JSON.stringify(config[key]) === JSON.stringify(value)) {
+                delete config[key];
               }
-            });
+            }
           }
-        });
+          this.saved = await postSettings("./api/config", JSON.stringify(config));
+          this.saveUnconfirmed = !this.saved;
+          if (this.saved && apply) this.restartResult = await postSettings("./api/restart");
+        } finally {
+          this.applying = false;
+          this.actionPending = false;
+        }
       },
       handleSearch() {
         // Clear all highlighting

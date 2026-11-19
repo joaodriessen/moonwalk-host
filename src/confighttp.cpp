@@ -7,6 +7,7 @@
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 
 // standard includes
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -1331,15 +1332,13 @@ namespace confighttp {
     print_req(request);
 
     nlohmann::json output_tree;
-    output_tree["status"] = true;
-    output_tree["platform"] = SUNSHINE_PLATFORM;
-    output_tree["version"] = PROJECT_VERSION;
-
     auto vars = config::parse_config(file_handler::read_file(config::sunshine.config_file.c_str()));
-
     for (auto &[name, value] : vars) {
       output_tree[name] = std::move(value);
     }
+    output_tree["status"] = true;
+    output_tree["platform"] = SUNSHINE_PLATFORM;
+    output_tree["version"] = PROJECT_VERSION;
     output_tree["host_version"] = SKYLIGHT_VERSION;
     output_tree["source_revision"] = PROJECT_VERSION_COMMIT;
 
@@ -1427,6 +1426,11 @@ namespace confighttp {
     ss << request->content.rdbuf();
     try {
       nlohmann::json input_tree = nlohmann::json::parse(ss);
+      if (input_tree.is_object()) {
+        for (const auto *key : {"status", "platform", "version", "host_version", "source_revision"}) {
+          input_tree.erase(key);
+        }
+      }
 
       const auto &schema = get_config_schema();
       if (schema) {
@@ -1862,7 +1866,7 @@ namespace confighttp {
   }
 
   /**
-   * @brief Restart Sunshine.
+   * @brief Acknowledge the request before restarting the host.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
    *
@@ -1881,8 +1885,14 @@ namespace confighttp {
 
     print_req(request);
 
-    // We may not return from this call
-    platf::restart();
+    response->close_connection_after_response = true;
+    send_response(response, {{"status", true}});
+    response->send([](const auto &error) {
+      static std::atomic_bool restarting {false};
+      if (!error && !restarting.exchange(true)) {
+        platf::restart();
+      }
+    });
   }
 
   /**

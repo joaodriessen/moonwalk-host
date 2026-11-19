@@ -75,9 +75,12 @@
       <div class="card-body">
         <h2 id="restart">{{ $t('troubleshooting.restart_sunshine') }}</h2>
         <p>{{ $t('troubleshooting.restart_sunshine_desc') }}</p>
-        <div class="alert alert-success" v-if="restartPressed === true">
+        <div class="alert alert-success" v-if="restartResult === true" role="status">
           <check-circle :size="18" class="icon"></check-circle>
-          {{ $t('troubleshooting.restart_sunshine_success') }}
+          {{ $t('troubleshooting.restart_requested') }}
+        </div>
+        <div class="alert alert-warning" v-if="restartResult === false" role="alert">
+          {{ $t('_common.restart_unconfirmed') }}
         </div>
         <div>
           <button class="btn btn-warning" :disabled="restartPressed" @click="restart">
@@ -190,6 +193,7 @@
   <script type="module">
     import { createApp } from 'vue'
     import { initApp } from './init'
+    import { postSettings } from './post-settings'
     import Navbar from './Navbar.vue'
     import {
       AlertCircle,
@@ -237,6 +241,7 @@
           logFilter: null,
           logInterval: null,
           restartPressed: false,
+          restartResult: null,
           platform: "",
           controllerEnabled: false,
           unpairPending: false,
@@ -457,17 +462,18 @@
           // Copy the filtered view if a filter is active.
           navigator.clipboard.writeText(this.actualLogs);
         },
-        restart() {
+        async restart() {
+          if (this.restartPressed) return;
           this.restartPressed = true;
-          setTimeout(() => {
+          this.restartResult = null;
+          this.restartResult = await postSettings("./api/restart");
+          if (this.restartResult) {
+            setTimeout(() => {
+              this.restartPressed = false;
+            }, 5000);
+          } else {
             this.restartPressed = false;
-          }, 5000);
-          fetch("./api/restart", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            }
-          });
+          }
         },
         ddResetPersistence() {
           this.ddResetPressed = true;

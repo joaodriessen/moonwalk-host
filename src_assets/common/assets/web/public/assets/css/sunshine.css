@@ -1711,66 +1711,6 @@ p {
     align-items: center;
 }
 
-/* ==========================================================================
-   Featured Apps Page Styles
-   ========================================================================== */
-
-.featured-app-card {
-    transition: transform var(--transition-base), box-shadow var(--transition-base);
-    overflow: hidden;
-}
-
-.featured-app-card:hover {
-    transform: translateY(-4px);
-    box-shadow: var(--shadow-lg);
-}
-
-.featured-app-card .card-body {
-    overflow: hidden;
-}
-
-.featured-app-icon {
-    width: 64px;
-    height: 64px;
-    min-width: 64px;
-    min-height: 64px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    border-radius: var(--radius-md);
-}
-
-.featured-app-icon img {
-    max-width: 64px !important;
-    max-height: 64px !important;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-}
-
-.featured-app-icon-placeholder {
-    width: 64px;
-    height: 64px;
-    background: var(--color-bg-muted);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-md);
-}
-
-.featured-app-card .card-title {
-    font-weight: 600;
-    color: var(--color-text-base);
-}
-
-.featured-app-card .text-muted.small {
-    line-height: 1.4;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-}
-
 .min-w-0 {
     min-width: 0;
 }

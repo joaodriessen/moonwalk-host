@@ -63,7 +63,6 @@ export default {
     Home,
     Lock,
     Layers,
-    Star,
     Settings,
     Shield,
     Info

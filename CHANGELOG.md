@@ -23,6 +23,8 @@
 - Save pairing changes before confirming them. An interrupted write leaves the
   previous device list intact, and new credential files are private to their owner.
 - The browser settings report failed unpair requests and let you try again.
+  Save and Restart show success after the host acknowledges them. Edits stay
+  on the page if saving fails.
 - The host version command reports the build and source commit without creating
   settings. Invalid daemon flags return an error.
 - Remove the inherited Featured Apps catalog and its external request from the
