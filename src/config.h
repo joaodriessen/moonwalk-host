@@ -312,6 +312,7 @@ namespace config {
   extern input_t input;
   extern sunshine_t sunshine;
 
+  // Zero starts the host, a positive result ends a handled command, and a negative result reports an error.
   int parse(int argc, char *argv[]);
   std::unordered_map<std::string, std::string> parse_config(const std::string_view &file_content);
 

@@ -1405,6 +1405,9 @@ namespace config {
       if (line == "--help"sv) {
         logging::print_help(*argv);
         return 1;
+      } else if (line == "--version"sv) {
+        args::version();
+        return 1;
       }
 #ifdef _WIN32
       else if (line == "--shortcut"sv) {

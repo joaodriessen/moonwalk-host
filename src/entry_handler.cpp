@@ -48,7 +48,7 @@ namespace args {
   }
 
   int version() {
-    // version was already logged at startup
+    std::cout << "Moonwalk Host " << SKYLIGHT_VERSION << " source " << PROJECT_VERSION_COMMIT << '\n';
     return 0;
   }
 

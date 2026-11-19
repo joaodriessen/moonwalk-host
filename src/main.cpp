@@ -6,6 +6,7 @@
 #include <chrono>
 #include <codecvt>
 #include <csignal>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 
@@ -64,9 +65,6 @@ std::map<std::string_view, std::function<int(const char *name, int argc, char **
    }},
   {"help"sv, [](const char *name, int argc, char **argv) {
      return args::help(name);
-   }},
-  {"version"sv, [](const char *name, int argc, char **argv) {
-     return args::version();
    }},
 #ifdef _WIN32
   {"restore-nvprefs-undo"sv, [](const char *name, int argc, char **argv) {
@@ -181,8 +179,9 @@ int main(int argc, char *argv[]) {
   mail::man = std::make_shared<safe::mail_raw_t>();
 
   // parse config file
-  if (config::parse(argc, argv)) {
-    return 0;
+  const int config_result = config::parse(argc, argv);
+  if (config_result != 0) {
+    return config_result > 0 ? EXIT_SUCCESS : EXIT_FAILURE;
   }
 
   auto log_deinit_guard = logging::init(config::sunshine.min_log_level, config::sunshine.log_file);
@@ -193,7 +192,7 @@ int main(int argc, char *argv[]) {
   // logging can begin at this point
   // if anything is logged prior to this point, it will appear in stdout, but not in the log viewer in the UI
   // the version should be printed to the log before anything else
-  BOOST_LOG(info) << PROJECT_NAME << " version: " << PROJECT_VERSION << " commit: " << PROJECT_VERSION_COMMIT << " (Skylight " << SKYLIGHT_VERSION << ")";
+  BOOST_LOG(info) << "Moonwalk Host " << SKYLIGHT_VERSION << " source " << PROJECT_VERSION_COMMIT << " (Sunshine engine " << PROJECT_VERSION << ")";
 
   // Log publisher metadata
   log_publisher_data();

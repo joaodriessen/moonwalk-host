@@ -1,11 +1,10 @@
 # Publisher Metadata
-set(SUNSHINE_PUBLISHER_NAME "Third Party Publisher"
-        CACHE STRING "The name of the publisher (not developer) of the application.")
-set(SUNSHINE_PUBLISHER_WEBSITE ""
+set(SUNSHINE_PUBLISHER_NAME "Moonwalk Host"
+        CACHE STRING "The package publisher's name.")
+set(SUNSHINE_PUBLISHER_WEBSITE "https://github.com/joaodriessen/moonwalk-host"
         CACHE STRING "The URL of the publisher's website.")
 set(SUNSHINE_PUBLISHER_ISSUE_URL "https://github.com/joaodriessen/moonwalk-host/issues"
-        CACHE STRING "The URL of the publisher's support site or issue tracker.
-        If you provide a modified version of Sunshine, we kindly request that you use your own url.")
+        CACHE STRING "The package publisher's issue tracker URL.")
 
 option(BUILD_DOCS "Build documentation" ON)
 option(BUILD_TESTS "Build tests" ON)
