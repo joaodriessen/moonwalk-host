@@ -113,22 +113,20 @@
       <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h2 id="unpair" class="mb-0">{{ $t('troubleshooting.unpair_title') }}</h2>
-          <button class="btn btn-danger" :disabled="unpairAllPressed" @click="unpairAll">
+          <button class="btn btn-danger" :disabled="unpairPending" @click="unpairClients()">
             <trash-2 :size="18" class="icon"></trash-2>
             {{ $t('troubleshooting.unpair_all') }}
           </button>
         </div>
         <p>{{ $t('troubleshooting.unpair_desc') }}</p>
-        <div class="alert alert-success d-flex align-items-center" v-if="showApplyMessage">
+        <div class="alert alert-success d-flex align-items-center" role="status" v-if="unpairResult?.success">
           <check-circle :size="18" class="icon"></check-circle>
-          <div><b>{{ $t('_common.success') }}</b> {{ $t('troubleshooting.unpair_single_success') }}</div>
-          <button class="btn btn-success ms-auto" @click="clickedApplyBanner">{{ $t('_common.dismiss') }}</button>
+          <div>
+            {{ $t(unpairResult.all ? 'troubleshooting.unpair_all_success' : 'troubleshooting.unpair_single_success') }}
+          </div>
+          <button class="btn btn-success ms-auto" @click="unpairResult = null">{{ $t('_common.dismiss') }}</button>
         </div>
-        <div class="alert alert-success" v-if="unpairAllStatus === true">
-          <check-circle :size="18" class="icon"></check-circle>
-          {{ $t('troubleshooting.unpair_all_success') }}
-        </div>
-        <div class="alert alert-danger" v-if="unpairAllStatus === false">
+        <div class="alert alert-danger" role="alert" v-if="unpairResult?.success === false">
           <alert-circle :size="18" class="icon"></alert-circle>
           {{ $t('troubleshooting.unpair_all_error') }}
         </div>
@@ -136,7 +134,8 @@
       <ul class="list-group list-group-flush" v-if="clients && clients.length > 0">
         <li v-for="client in clients" :key="client.uuid" class="list-group-item d-flex align-items-center">
           <div class="flex-grow-1">{{ client.name !== "" ? client.name : $t('troubleshooting.unpair_single_unknown') }}</div>
-          <button class="btn btn-danger ms-auto" @click="unpairSingle(client.uuid)">
+          <button class="btn btn-danger ms-auto" :disabled="unpairPending" @click="unpairClients(client.uuid)"
+                  :aria-label="$t('troubleshooting.unpair_single_label', { device: client.name || $t('troubleshooting.unpair_single_unknown') })">
             <trash-2 :size="18" class="icon"></trash-2>
           </button>
         </li>
@@ -238,11 +237,10 @@
           logFilter: null,
           logInterval: null,
           restartPressed: false,
-          showApplyMessage: false,
           platform: "",
           controllerEnabled: false,
-          unpairAllPressed: false,
-          unpairAllStatus: null,
+          unpairPending: false,
+          unpairResult: null,
           vigembus: {
             installed: false,
             version: '',
@@ -419,52 +417,41 @@
               }, 5000);
             });
         },
-        unpairAll() {
-          this.unpairAllPressed = true;
-          fetch("./api/clients/unpair-all", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            }
-           })
-            .then((r) => r.json())
-            .then((r) => {
-              this.unpairAllPressed = false;
-              this.unpairAllStatus = r.status;
-              setTimeout(() => {
-                this.unpairAllStatus = null;
-              }, 5000);
-              this.refreshClients();
+        async unpairClients(uuid = null) {
+          if (this.unpairPending) return;
+          this.unpairPending = true;
+          this.unpairResult = null;
+          const all = uuid === null;
+          let success = false;
+          try {
+            const response = await fetch(all ? "./api/clients/unpair-all" : "./api/clients/unpair", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: all ? undefined : JSON.stringify({ uuid }),
             });
-        },
-        unpairSingle(uuid) {
-          fetch("./api/clients/unpair", {
-            method: "POST",
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ uuid })
-          }).then(() => {
-            this.showApplyMessage = true;
-            this.refreshClients();
-          });
+            success = response.ok && (await response.json()).status === true;
+          } catch {
+            // Leave the list untouched if the request never returned a result.
+          } finally {
+            this.unpairResult = { all, success };
+            this.unpairPending = false;
+          }
+          if (success) this.refreshClients();
         },
         refreshClients() {
           fetch("./api/clients/list")
             .then((response) => response.json())
             .then((response) => {
-              const clientList = document.querySelector("#client-list");
-              if (response.status === true && response.named_certs && response.named_certs.length) {
+              if (response.status !== true) return;
+              if (Array.isArray(response.named_certs)) {
                 this.clients = response.named_certs.sort((a, b) => {
                   return (a.name.toLowerCase() > b.name.toLowerCase() || a.name === "" ? 1 : -1)
                 });
               } else {
                 this.clients = [];
               }
-            });
-        },
-        clickedApplyBanner() {
-          this.showApplyMessage = false;
+            })
+            .catch(() => { /* Keep the last list if the host is temporarily unavailable. */ });
         },
         copyLogs() {
           // Copy the filtered view if a filter is active.

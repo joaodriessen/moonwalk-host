@@ -22,6 +22,7 @@
   display helper and web assets in a fresh developer build.
 - Save pairing changes before confirming them. An interrupted write leaves the
   previous device list intact, and new credential files are private to their owner.
+- The browser settings report failed unpair requests and let you try again.
 
 ## Earlier private alpha builds
 
