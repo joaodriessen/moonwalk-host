@@ -14,7 +14,7 @@
 
 Moonwalk Host runs in your Mac’s menu bar. It sends your desktop and sound to [Moonwalk](https://github.com/joaodriessen/moonwalk) on Linux or to a [Moonlight](https://moonlight-stream.org/) client. Your keyboard and mouse work on the Mac while you’re connected. Quit Moonwalk Host and it stops accepting connections.
 
-This is a **private alpha** for **Apple Silicon** Macs running **macOS 14 or later**. Invited testers install a signed and notarized DMG when one is available. See the [installation guide](docs/INSTALL.md) for the permissions macOS asks for and how to pair a device.
+Moonwalk Host is in **alpha**. It runs on **Apple Silicon** Macs with **macOS 14 or later**. Invited testers install a signed and notarized DMG when one is available. See the [installation guide](docs/INSTALL.md) for the permissions macOS asks for and how to pair a device.
 
 ## Use the display in front of you
 

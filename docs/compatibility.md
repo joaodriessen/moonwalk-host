@@ -1,6 +1,6 @@
 # Compatibility
 
-Moonwalk Host targets Apple Silicon Macs running macOS 14 or later. The table describes intended private alpha support and the areas still being tested.
+Moonwalk Host targets Apple Silicon Macs running macOS 14 or later. The table describes alpha support and the areas still being tested.
 
 | Area | What to expect |
 | --- | --- |
