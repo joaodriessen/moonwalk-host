@@ -65,7 +65,7 @@ esac
 exit 64
 SH
 
-for tool in hdiutil otool install_name_tool; do
+for tool in hdiutil otool install_name_tool realpath vtool; do
   cat > "$FAKE_BIN/$tool" <<'SH'
 #!/bin/bash
 exit 0

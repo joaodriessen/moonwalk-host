@@ -38,4 +38,48 @@ grep -Fqi collision "$WORK/collision.out" || fail "collision error was not actio
 [ -x "$BUNDLER" ] || fail "dependency bundler is missing or not executable"
 [ -x "$AUDITOR" ] || fail "dependency auditor is missing or not executable"
 
-echo "PASS: Mach-O dependency classification and collisions are fail-closed"
+mkdir "$WORK/bin"
+cat > "$WORK/bin/file" <<'SH'
+#!/bin/bash
+case "$2" in
+  */Resources/Helpers/Skylight) echo 'Mach-O 64-bit executable arm64' ;;
+  *) echo 'data' ;;
+esac
+SH
+cat > "$WORK/bin/lipo" <<'SH'
+#!/bin/bash
+echo arm64
+SH
+cat > "$WORK/bin/vtool" <<'SH'
+#!/bin/bash
+printf 'platform MACOS\n    minos %s\n' "$FIXTURE_MINOS"
+SH
+cat > "$WORK/bin/otool" <<'SH'
+#!/bin/bash
+[ "$FIXTURE_DEPENDENCY" != fail ] || exit 1
+printf 'helper:\n\t%s (compatibility version 1.0.0, current version 1.0.0)\n' "$FIXTURE_DEPENDENCY"
+SH
+chmod +x "$WORK/bin/"*
+touch "$APP/Contents/Resources/Helpers/Skylight" "$WORK/liboutside.dylib"
+touch "$APP/Contents/Resources/THIRD-PARTY-NOTICES.txt"
+mkdir -p "$APP/Contents/Frameworks/Stable"
+touch "$APP/Contents/Frameworks/Stable/liblinked.dylib"
+ln -s Stable/liblinked.dylib "$APP/Contents/Frameworks/liblinked.dylib"
+ln -s "$WORK/liboutside.dylib" "$APP/Contents/Frameworks/libescape.dylib"
+
+audit() { PATH="$WORK/bin:$PATH" FIXTURE_MINOS="$1" FIXTURE_DEPENDENCY="$2" "$AUDITOR" "$APP"; }
+expect_audit_failure() {
+  if audit "$1" "$2" > "$WORK/audit.out" 2>&1; then
+    fail "accepted $1 / $2"
+  fi
+  grep -Fq "$3" "$WORK/audit.out" || { cat "$WORK/audit.out" >&2; fail "expected $3"; }
+}
+
+audit 14.0 '@rpath/liblinked.dylib'
+audit 13.6.7 '@loader_path/../../Frameworks/libinside.dylib'
+expect_audit_failure 14.0.1 '@rpath/libinside.dylib' 'deployment target exceeds macOS 14.0'
+expect_audit_failure 14.0 '@rpath/libescape.dylib' 'dependency escapes app bundle'
+expect_audit_failure 14.0 '@loader_path/../../../../liboutside.dylib' 'dependency escapes app bundle'
+expect_audit_failure 14.0 fail 'could not read dependencies'
+
+echo "PASS: Mach-O dependency audit rejects support floor and bundle escapes"

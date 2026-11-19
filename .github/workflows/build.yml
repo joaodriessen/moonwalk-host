@@ -42,6 +42,7 @@ jobs:
           done
           bash scripts/release/verify-artifact.sh --repo-only
           bash scripts/release/tests/test-repo-verifier.sh
+          bash scripts/release/tests/test-macho-dependencies.sh
 
           native=true
           web=true

@@ -84,7 +84,7 @@ release_team_id() {
 
 require_release_tools() {
   local tool
-  for tool in codesign security hdiutil otool install_name_tool; do
+  for tool in codesign security hdiutil otool install_name_tool realpath vtool; do
     command -v "$tool" >/dev/null 2>&1 || {
       release_die "required release tool '$tool' was not found"
       return 1
