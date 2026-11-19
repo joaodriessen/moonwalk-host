@@ -190,9 +190,7 @@ protocol SkylightControl {
     func menuHeartbeat(withReply reply: @escaping () -> Void)
 }
 
-/// Mach service name the host daemon vends the listener on (must match
-/// src/platform/macos/xpc_control.mm's `kSkylightMachServiceName` and the `MachServices`
-/// key in macos-dist/com.lumen.sunshine.plist).
+/// The Mach service shared by the menu, the daemon and the generated LaunchAgent.
 enum SkylightXPC {
     // Build-time generated (GeneratedIdentity.swift, from skylight-identity.conf)
     // -- see macos-dist/generate-identity.sh.

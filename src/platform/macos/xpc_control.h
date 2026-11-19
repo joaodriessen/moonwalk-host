@@ -1,16 +1,8 @@
 /**
  * @file src/platform/macos/xpc_control.h
- * @brief Declarations for the macOS XPC control service (S0 walking skeleton) and the
- *        validated-menu capture-gate authority added by
- *        docs/design/2026-07-19-daemon-lifecycle-coupling.md.
+ * @brief Declares the local macOS XPC service and the validated menu presence used by capture.
  *
- * Stands up an NSXPCListener on the Mach service `com.example.lumen.xpc` so the native
- * SkylightMenu.app (macos-dist/SkylightMenu) can talk to the running daemon in-process,
- * authenticated purely by code signature (no passwords, no HTTP). See
- * docs/design/menubar-app.md for the S0-S3 control-surface design and
- * docs/design/2026-07-19-daemon-lifecycle-coupling.md for the capture-gate/lifetime-coupling
- * design this header's new entry points implement; this header is the ONLY thing the rest of
- * the C++ codebase needs to know about either.
+ * The menu and daemon verify each other's signing identity. See docs/architecture.md.
  */
 #pragma once
 

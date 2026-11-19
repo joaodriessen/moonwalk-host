@@ -84,8 +84,7 @@ public enum JSONValue: Codable, Equatable {
     }
 }
 
-/// One option from `config_schema.json`'s `options[]` -- name/type/default/tab/platform/
-/// constraints. Mirrors `docs/design/config-schema-ssot.md`'s field set exactly; nothing added.
+/// One option from the shared `config_schema.json`, used to populate the native settings UI.
 public struct ConfigOption: Codable, Identifiable, Equatable {
     public var id: String { name }
 

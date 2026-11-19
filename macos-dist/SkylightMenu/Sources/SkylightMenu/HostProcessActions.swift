@@ -30,10 +30,7 @@ enum HostProcessActions {
         }
     }
 
-    /// `launchctl kickstart -k gui/<uid>/com.lumen.sunshine` -- the exact command the S1/S2
-    /// stub alert told the user to run manually, matching the `Label` in
-    /// macos-dist/com.lumen.sunshine.plist. `-k` kills the running instance first, so
-    /// `KeepAlive`/`RunAtLoad` in the plist bring it straight back up.
+    /// Ask launchd to replace the running daemon using its configured service label.
     @MainActor
     static func restartHost(completion: @escaping @MainActor (ActionResult) -> Void) {
         let label = (GeneratedIdentity.launchAgentPlistName as NSString).deletingPathExtension

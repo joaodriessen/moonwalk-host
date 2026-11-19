@@ -84,15 +84,8 @@ else
 fi
 echo "    designated requirement:"; codesign -dr- "$APP" 2>&1 | grep -i designated | sed 's/^/    /'
 
-# `build.sh install` -> nest the app inside the deployed Skylight.app bundle
-# (single-app consolidation, 2026-07-15): the menubar app lives at
-# Skylight.app/Contents/Helpers/SkylightMenu.app and keeps its own bundle id +
-# signature, so BOTH XPC peer pins (menu->daemon com.example.lumen, daemon->menu
-# com.example.skylight.menu) are untouched. After nesting we must re-seal the
-# OUTER bundle, since its CodeResources covers Contents/. Startup is a classic
-# login item pointing at the nested path (the in-app SMAppService.mainApp
-# toggle does not reflect that; migrating it to Contents/Library/LoginItems +
-# SMAppService.loginItem is future UI work). This does NOT restart the daemon.
+# Legacy developer install. Keep the nested menu's bundle identity and re-sign
+# the outer app after replacing its contents. The daemon keeps running.
 if [ "${1:-}" = "install" ]; then
     HOST_APP="$HOME/Applications/Skylight.app"
     INSTALLED="$HOST_APP/Contents/Helpers/SkylightMenu.app"

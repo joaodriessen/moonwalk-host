@@ -10,17 +10,8 @@
 # be run manually: it mutates the live daemon config/state for its duration and drives the real
 # installed app.
 #
-# WHY THIS TARGETS THE INSTALLED APP (not a bare `build/sunshine` spawn): main.cpp's capture
-# gate (docs/design/2026-07-19-daemon-lifecycle-coupling.md #2B.1) requires a launchd-vended
-# `com.example.lumen.xpc`/`io.github.joaodriessen.skylight.daemon` Mach service AND a code-
-# signature-validated SkylightMenu peer to attach within 10s, or the daemon self-shuts-down
-# before ever starting mDNS/HTTP (main.cpp:406-430). A daemon launched bare from a terminal can
-# never satisfy this (xpc_control.h's own doc comment: listener setup no-ops when the Mach
-# service isn't launchd-vended) -- confirmed live, twice, 2026-08-14. The installed, launchd-
-# registered, Gatekeeper-signed `/Applications/Skylight.app` (menu app + daemon helper) is the
-# ONLY context that legitimately passes this gate outside of Task 10's real hardware round. This
-# is a deliberate conductor decision, not a workaround: the gate is a safety property and is not
-# bypassed here.
+# The installed app supplies the LaunchAgent and signed menu that the daemon
+# requires before starting network services. See docs/architecture.md.
 #
 # RED = run against the pre-fix installed bundle (built 2026-08-14 00:33, before Task 3's
 # display_device::destroy_virtual_display() fix landed in src/). GREEN = rerun after a release

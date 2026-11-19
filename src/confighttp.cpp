@@ -484,12 +484,8 @@ namespace confighttp {
   /**
    * @brief Get the parsed `config_schema.json`, loading and caching it on first use.
    *
-   * Read from the same assets tree the rest of confighttp serves out of (see `WEB_DIR`,
-   * used by getConfigPage/getNodeModules/etc.) -- the schema ships alongside config.html in
-   * `src_assets/common/assets/web/`. Parsed once; a missing or corrupt file is logged and
-   * cached as `std::nullopt` so callers can fall back to the pre-stage-3 unvalidated write
-   * path without config UI availability depending on the schema file being present
-   * (docs/design/config-schema-ssot.md, stage 3).
+   * The schema ships beside the browser settings. A missing or unreadable schema is logged
+   * and cached as `std::nullopt`, preserving the browser's settings fallback.
    * @return The parsed schema, or `std::nullopt` if it could not be loaded.
    */
   const std::optional<nlohmann::json> &get_config_schema() {
@@ -1392,9 +1388,8 @@ namespace confighttp {
    * Known keys are validated against `config_schema.json` (type/range/enum) before anything is
    * written -- a bad known value is rejected with HTTP 400 naming every offending key, not just
    * the first. Unknown keys (e.g. from a hand-edited or upstream-newer conf) are logged as a
-   * warning and still written through unchanged. If the schema itself is unavailable, validation
-   * is skipped entirely and the bag is written as before stage 3
-   * (docs/design/config-schema-ssot.md).
+   * warning and written through unchanged. The settings endpoint remains available when the
+   * shared schema cannot be loaded.
    *
    * @api_examples{/api/config| POST| {"key":"value"}}
    */

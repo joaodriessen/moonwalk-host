@@ -2,9 +2,7 @@ import Foundation
 import Testing
 @testable import SkylightMenuCore
 
-/// Host-contract regression coverage for `ConfigSchema`'s decode of `config_schema.json`
-/// (docs/design/config-schema-ssot.md) -- the actual document `HostConnection.applyConfigSchema`
-/// decodes verbatim from the host's `getConfigSchema` XPC reply.
+/// Check the schema format HostConnection decodes from the daemon's XPC reply.
 @Suite("ConfigSchema decode")
 struct ConfigSchemaTests {
     private let fixture = """

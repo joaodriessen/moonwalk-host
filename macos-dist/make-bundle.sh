@@ -112,20 +112,9 @@ PLIST
 
 # 5) Sign inner-out
 echo "==> signing…"
-# -i "${SKYLIGHT_BUNDLE_ID}.<name>" is load-bearing for vd_helper specifically: with no explicit
-# -i, codesign's derived identifier for a bare (non-.app) Mach-O living at Contents/MacOS/ of a
-# bundle whose CFBundleExecutable is a DIFFERENT binary (the launcher stub) still gets attributed
-# by LaunchServices to the enclosing bundle's identifier ($SKYLIGHT_BUNDLE_ID) whenever it's
-# running -- confirmed live via `lsappinfo info -only bundleID <vd_helper pid>` reporting
-# com.example.lumen. Since vd_helper only runs WHILE STREAMING (spawned by the daemon to hold the
-# virtual display), this makes `open Skylight.app` -- which LaunchServices treats as "activate the
-# existing com.example.lumen instance" the instant it believes ANY process holds that identifier --
-# silently skip re-running SkylightLauncher and never reopen the menu, but only during a stream.
-# Giving vd_helper (and get_display_origin, same class of bare helper) their own distinct
-# identifiers stops LaunchServices from conflating either with the bundle itself. Neither
-# participates in any XPC peer-pinning (they're plain stdin/stdout subprocesses of the daemon, not
-# XPC peers), so this is safe -- unlike sunshine's OWN `-i "$SKYLIGHT_BUNDLE_ID"` pin below, which
-# is genuinely load-bearing and must NOT change.
+# Give subprocess helpers their own identifiers. Launch Services can otherwise
+# try to activate a running display helper when the user opens the app during a
+# stream. The daemon's identifier below is checked by the XPC menu connection.
 for bin in vd_helper get_display_origin; do
   [ -f "$APPDIR/Contents/MacOS/$bin" ] && codesign -s "$SKYLIGHT_SIGNING_IDENTITY" -i "${SKYLIGHT_BUNDLE_ID}.$bin" --force --timestamp=none "$APPDIR/Contents/MacOS/$bin"
 done

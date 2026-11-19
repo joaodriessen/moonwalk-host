@@ -1,7 +1,6 @@
 /**
  * @file config_validate.cpp
- * @brief Definitions for validating a posted `saveConfig` key/value bag against
- *        `config_schema.json` (docs/design/config-schema-ssot.md, stage 3).
+ * @brief Validate settings posted by the browser against `config_schema.json`.
  */
 
 // standard includes
@@ -245,10 +244,8 @@ namespace config_validate {
       }
 
       if (type == "string" || type == "path" || type == "enum") {
-        // "enum" without constraints.enum is a dynamic/unconstrained allow-list (e.g. gamepad's
-        // runtime-populated list, or the parser's unconstrained string_f enums) -- per
-        // docs/design/config-schema-ssot.md, validate as a plain string only. Do NOT invent an
-        // enum allow-list here.
+        // An enum without a list in the schema can take values discovered at runtime,
+        // such as available gamepads. Validate it as a string.
         if (!value.is_string()) {
           violations.push_back({key, stringify(value), "expected a string"});
         }

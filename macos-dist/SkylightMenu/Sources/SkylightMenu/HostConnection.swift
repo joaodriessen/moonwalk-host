@@ -74,11 +74,7 @@ struct PermissionSnapshot: Sendable {
 // pure Codable value data, no behavior change) so `PairingState`/`PairingReducer` can reference it
 // without depending on this executable target. See SkylightMenuCore/PendingPairing.swift.
 
-/// Owns the XPC connection to the host daemon's `com.example.lumen.xpc` Mach service and
-/// mirrors AXIS 1's peer-authentication model symmetrically: just as the daemon validates
-/// this app's designated requirement before accepting a connection
-/// (src/platform/macos/xpc_control.mm), this app validates the DAEMON's designated
-/// requirement before trusting anything it returns.
+/// Connects to the configured XPC service after validating the daemon's signing identity.
 @MainActor
 @Observable
 final class HostConnection {
@@ -185,14 +181,7 @@ final class HostConnection {
     /// proxy error) drives the `.connected` <-> other transition.
     private var appNapActivityToken: NSObjectProtocol?
 
-    // The peer requirement this APP pins for the daemon it connects to: it must be the
-    // Lumen sunshine host, identified by ITS bundle id (com.example.lumen), signed by the SAME
-    // self-signed "Lumen Local Signing" cert this app is signed with. SHA-1 obtained via:
-    //   security find-certificate -c "Lumen Local Signing" -Z | grep SHA-1
-    // Mirrors src/platform/macos/xpc_control.mm's kClientRequirementString, with the
-    // identifier swapped for the OTHER side's bundle id (cross-matching, not self-matching).
-    // Build-time generated (bundle id + this machine's signing-cert SHA-1);
-    // see macos-dist/generate-identity.sh.
+    // The build generates both peer requirements from the bundle identifiers and signer.
     private static let hostRequirementString = GeneratedIdentity.hostPeerRequirement
 
     /// The ONE place `status` is ever mutated (P1.1, post-judge-review) -- every direct

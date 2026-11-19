@@ -1,13 +1,9 @@
 /**
  * @file src/platform/macos/xpc_control.mm
- * @brief S0 walking skeleton: XPC control service for the native SkylightMenu.app.
+ * @brief XPC control service for the Moonwalk Host menu.
  *
- * Additive, macOS-only. Vends ONE Mach service (`com.example.lumen.xpc`, see the matching
- * `MachServices` key in macos-dist/com.lumen.sunshine.plist) exposing a tiny control
- * protocol (`SkylightControl`) authenticated by code-signature peer validation -- no
- * passwords, no Keychain, no HTTP. Most calls read/write configuration and status;
- * explicit owner actions can end an identified session or run a bounded local audio test.
- * See docs/design/menubar-app.md ("S0 -- Walking skeleton") for the design this implements.
+ * The configured LaunchAgent exposes the local service. Both peers check signing
+ * identity before sharing settings and status or carrying out owner requests.
  */
 
 // platform includes
@@ -41,7 +37,7 @@
 #include <utility>
 #include <vector>
 
-// POSIX includes (NOTE_EXIT watch + liveness probe, docs/design/2026-07-19-daemon-lifecycle-coupling.md §2C/§2D)
+// POSIX process-exit watches and liveness probes.
 #include <sys/event.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -92,15 +88,8 @@ namespace {
   // session start, not per-frame, so this XPC-local lock is sufficient for the realistic race.
   std::mutex g_video_config_mutex;
 
-  // ===========================================================================================
-  // Validated-menu authority (docs/design/2026-07-19-daemon-lifecycle-coupling.md §2A-§2D).
-  //
-  // The single daemon-side authority answering "is a peer-validated SkylightMenu currently
-  // attached?" -- drives the capture gate (main.cpp's wait_for_validated_menu / rtsp.cpp's and
-  // nvhttp.cpp's is_validated_menu_attached() session-acceptance checks) AND the lifetime
-  // coupling (NOTE_EXIT fast path + periodic self-check backstop below), so the two can never
-  // disagree (design's RISK 2 unification).
-  // ===========================================================================================
+  // Start and session admission use the same validated-menu state as the
+  // process-exit watch and periodic presence check. See docs/architecture.md.
 
   // Tunables (design §9.1 -- judgment calls, not measured values; live-tune on real hardware).
   // Kept as named constants, not magic numbers, specifically so they're easy to find and adjust
@@ -1023,15 +1012,8 @@ namespace {
 /// Callers MUST warn the operator that this ends an active session before invoking it.
 - (void)unpairAllClientsWithReply:(void (^)(BOOL success))reply;
 
-/// Daemon lifecycle coupling (docs/design/2026-07-19-daemon-lifecycle-coupling.md §3 "Quit
-/// flow"): the menu's "Quit Skylight" calls this BEFORE `NSApplication.shared.terminate(nil)`.
-/// Acks immediately (so the reply flushes before anything tears down -- see
-/// `HostProcessActions.swift:8`'s exact lesson about answering-then-killing dropping the reply),
-/// then after a short delay raises the SAME graceful `SIGTERM` self-shutdown path every other
-/// lifecycle trigger (NOTE_EXIT, the presence-window self-check, the startup-grace timeout)
-/// funnels through. This ends any active stream and releases the virtual display via RAII --
-/// intentional (§5a): quitting the menu now ends the stream and the daemon, superseding the
-/// prior "two independent lifecycles" behavior.
+/// Acknowledge the menu's quit request before shutting down the daemon.
+/// Graceful shutdown ends the stream and releases the virtual display.
 - (void)shutdownHostWithReply:(void (^)(void))reply;
 
 /// Daemon lifecycle coupling §2C: a tiny, cheap no-op the menu calls on a dedicated ~2s timer
@@ -1263,9 +1245,7 @@ namespace {
 }
 
 - (void)getHideCursorWithReply:(void (^)(BOOL value))reply {
-  // Polarity (per docs/design/menubar-app.md S1 spec): "Hide Mac cursor" = YES means the
-  // live `display_cursor` global (src/globals.h, default true = SHOWN, flipped today by the
-  // capture hotkey at src/input.cpp:216) is currently false.
+  // The setting is expressed as "Hide Mac cursor", the inverse of display_cursor.
   reply(::display_cursor ? NO : YES);
 }
 

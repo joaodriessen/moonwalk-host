@@ -1,7 +1,6 @@
 /**
  * @file config_validate.h
- * @brief Declarations for validating a posted `saveConfig` key/value bag against
- *        `config_schema.json` (docs/design/config-schema-ssot.md, stage 3).
+ * @brief Validate settings posted by the browser against `config_schema.json`.
  *
  * Kept free of any HTTP/server dependency so it can be unit tested directly.
  */
@@ -58,8 +57,7 @@ namespace config_validate {
    * `constraints.min`/`constraints.max` (when present) and `constraints.enum` (when present).
    * All violations are collected -- validation does not stop at the first bad key.
    *
-   * Keys not present in the schema are recorded in `result_t::unknown_keys` and are never a
-   * violation (warn-and-preserve, per docs/design/config-schema-ssot.md).
+   * Unknown keys go into `result_t::unknown_keys` so the caller can warn and preserve them.
    *
    * Values that would be skipped by `saveConfig`'s existing write logic (`null`, or an empty
    * string) are skipped here too -- they are never written today, so they are not validated.
