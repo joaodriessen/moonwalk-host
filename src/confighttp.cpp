@@ -182,8 +182,7 @@ namespace confighttp {
    * @param response The HTTP response object.
    * @param output_tree The JSON tree to send.
    */
-  void send_response(resp_https_t response, const nlohmann::json &output_tree) {
-    SimpleWeb::CaseInsensitiveMultimap headers;
+  void send_response(resp_https_t response, const nlohmann::json &output_tree, SimpleWeb::CaseInsensitiveMultimap headers = {}) {
     headers.emplace("Content-Type", "application/json");
     headers.emplace("X-Frame-Options", "DENY");
     headers.emplace("Content-Security-Policy", "frame-ancestors 'none';");
@@ -531,12 +530,11 @@ namespace confighttp {
    * @brief Validates the application index and sends error response if invalid.
    * @param response The HTTP response object.
    * @param request The HTTP request object.
+   * @param apps The application list from the request's current file snapshot.
    * @param index The application index/id.
    */
-  bool check_app_index(resp_https_t response, req_https_t request, int index) {
-    std::string file = file_handler::read_file(config::stream.file_apps.c_str());
-    nlohmann::json file_tree = nlohmann::json::parse(file);
-    if (const auto &apps = file_tree["apps"]; index < 0 || index >= static_cast<int>(apps.size())) {
+  bool check_app_index(resp_https_t response, req_https_t request, const nlohmann::json &apps, int index) {
+    if (index < 0 || index >= static_cast<int>(apps.size())) {
       std::string error;
       if (const int max_index = static_cast<int>(apps.size()) - 1; max_index < 0) {
         error = "No applications found";
@@ -547,6 +545,19 @@ namespace confighttp {
       return false;
     }
     return true;
+  }
+
+  std::string apps_etag(const std::string &contents) {
+    return std::format("\"{}\"", util::hex(crypto::hash(contents)).to_string());
+  }
+
+  bool check_apps_etag(const resp_https_t &response, const req_https_t &request, const std::string &contents) {
+    const auto condition = request->header.find("If-Match");
+    if (condition == request->header.end() || condition->second == "*" || condition->second == apps_etag(contents)) {
+      return true;
+    }
+    response->write(SimpleWeb::StatusCode::client_error_precondition_failed);
+    return false;
   }
 
   /**
@@ -841,7 +852,7 @@ namespace confighttp {
         }
       }
 
-      send_response(response, file_tree);
+      send_response(response, file_tree, {{"ETag", apps_etag(content)}, {"Cache-Control", "no-store"}});
     } catch (std::exception &e) {
       BOOST_LOG(warning) << "GetApps: "sv << e.what();
       bad_request(response, request, e.what());
@@ -1002,7 +1013,11 @@ namespace confighttp {
       {
         std::lock_guard<std::mutex> apps_lock(apps_write_mutex);
 
-        auto file_tree = nlohmann::json::parse(file_handler::read_file(config::stream.file_apps.c_str()));
+        const auto contents = file_handler::read_file(config::stream.file_apps.c_str());
+        if (!check_apps_etag(response, request, contents)) {
+          return;
+        }
+        auto file_tree = nlohmann::json::parse(contents);
 
         if (input_tree["prep-cmd"].empty()) {
           input_tree.erase("prep-cmd");
@@ -1020,23 +1035,10 @@ namespace confighttp {
         if (index == -1) {
           apps_node.push_back(input_tree);
         } else {
-          // Bounds-check an existing-app edit the same way deleteApp/getCover already do (see
-          // check_app_index()). Without this, an out-of-range non-(-1) index silently matches no
-          // entry in the loop below (i == index never true for any real i), so nothing is written
-          // but the handler still returns {"status": true} -- a false success the caller has no
-          // way to detect.
-          if (!check_app_index(response, request, index)) {
+          if (!check_app_index(response, request, apps_node, index)) {
             return;
           }
-          nlohmann::json newApps = nlohmann::json::array();
-          for (size_t i = 0; i < apps_node.size(); ++i) {
-            if (i == index) {
-              newApps.push_back(input_tree);
-            } else {
-              newApps.push_back(apps_node[i]);
-            }
-          }
-          file_tree["apps"] = newApps;
+          apps_node[index] = std::move(input_tree);
         }
 
         // Sort the apps array by name
@@ -1107,26 +1109,21 @@ namespace confighttp {
 
     try {
       nlohmann::json output_tree;
-      nlohmann::json new_apps = nlohmann::json::array();
       const int index = std::stoi(request->path_match[1]);
 
       {
         std::lock_guard<std::mutex> apps_lock(apps_write_mutex);
 
-        if (!check_app_index(response, request, index)) {
+        const auto contents = file_handler::read_file(config::stream.file_apps.c_str());
+        if (!check_apps_etag(response, request, contents)) {
           return;
         }
-
-        std::string file = file_handler::read_file(config::stream.file_apps.c_str());
-        nlohmann::json file_tree = nlohmann::json::parse(file);
+        auto file_tree = nlohmann::json::parse(contents);
         auto &apps = file_tree["apps"];
-
-        for (size_t i = 0; i < apps.size(); ++i) {
-          if (i != index) {
-            new_apps.push_back(apps[i]);
-          }
+        if (!check_app_index(response, request, apps, index)) {
+          return;
         }
-        file_tree["apps"] = new_apps;
+        apps.erase(index);
 
         if (!file_handler::write_file_atomic(config::stream.file_apps.c_str(), file_tree.dump(4))) {
           bad_request(response, request, "failed to write application settings");
@@ -1508,12 +1505,11 @@ namespace confighttp {
 
     try {
       const int index = std::stoi(request->path_match[1]);
-      if (!check_app_index(response, request, index)) {
-        return;
-      }
-
       std::string file = file_handler::read_file(config::stream.file_apps.c_str());
       nlohmann::json file_tree = nlohmann::json::parse(file);
+      if (!check_app_index(response, request, file_tree["apps"], index)) {
+        return;
+      }
       auto &apps = file_tree["apps"];
 
       auto &app = apps[index];

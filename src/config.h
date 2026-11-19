@@ -220,7 +220,7 @@ namespace config {
 
     std::string external_ip;
 
-    bool web_ui_enabled;  ///< Gate for the confighttp web UI thread/listener (port 47990). Default true, preserving upstream posture. When false, confighttp never starts (no web port opens); native SkylightMenu (macOS) remains fully functional either way since it talks to nvhttp/XPC directly, not the web UI.
+    bool web_ui_enabled;  ///< Optional browser server, off by default. The native menu uses XPC independently.
   };
 
   struct input_t {

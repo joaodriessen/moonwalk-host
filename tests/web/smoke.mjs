@@ -21,12 +21,16 @@ let saveReply = { status: false };
 let restartReply = { status: false };
 const saves = [];
 let restarts = 0;
+let appTag = '"initial"';
+let acceptAppChanges = false;
+const apps = [{name: 'Example Desktop'}, {name: 'Missing cover', 'image-path': 'missing.png'}];
+const appChanges = [];
 const contentTypes = {
   '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
   '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml',
 };
-function sendJSON(res, body, status = 200) {
-  res.writeHead(status, {'Content-Type': 'application/json'}).end(JSON.stringify(body));
+function sendJSON(res, body, status = 200, headers = {}) {
+  res.writeHead(status, {'Content-Type': 'application/json', ...headers}).end(JSON.stringify(body));
 }
 const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
@@ -52,7 +56,24 @@ const server = createServer(async (req, res) => {
     }
     if (path === '/api/clients/list') return sendJSON(res, { status: true, named_certs: [] });
     if (path === '/api/pending-pairings') return sendJSON(res, { status: true, pending: [] });
-    if (path === '/api/apps') return sendJSON(res, { apps: [], env: {} });
+    if (path === '/api/apps' && req.method === 'GET') {
+      return sendJSON(res, { apps, env: {} }, 200, {'ETag': appTag, 'Cache-Control': 'no-store'});
+    }
+    if ((path === '/api/apps' && req.method === 'POST') ||
+        (path.startsWith('/api/apps/') && req.method === 'DELETE')) {
+      let body = '';
+      for await (const chunk of req) body += chunk;
+      const tag = req.headers['if-match'];
+      const edit = body ? JSON.parse(body) : null;
+      appChanges.push({method: req.method, tag, edit});
+      if (tag !== appTag) return res.writeHead(412).end();
+      if (!acceptAppChanges) return sendJSON(res, { status: false });
+      if (edit) apps[edit.index] = {name: edit.name};
+      else apps.splice(Number(path.split('/').at(-1)), 1);
+      appTag = '"updated"';
+      return sendJSON(res, { status: true });
+    }
+    if (path.startsWith('/api/covers/')) return res.writeHead(404).end();
     if (path === '/api/logs') return res.end('');
     if (path.startsWith('/api/')) return sendJSON(res, { status: true });
     if (!(pages.includes(path) || path.startsWith('/assets/'))) return res.writeHead(404).end();
@@ -186,8 +207,38 @@ try {
     await click(restartText);
     await hasText('Moonwalk Host accepted the restart request');
     assert.equal(restarts, 4);
+
+    await openPage('/apps');
+    await until(() => evaluate('Array.from(document.querySelectorAll(".app-initial")).map(el => el.textContent).join("") === "EM"'), 'missing cover fallback');
+    await click('Edit');
+    await evaluate('(() => { const field = document.getElementById("appName"); field.value = "Edited Desktop"; field.dispatchEvent(new Event("input", {bubbles:true})); })()');
+    appTag = '"concurrent"';
+    await click('Save');
+    await hasText('The application list changed');
+    assert.equal(await evaluate('document.getElementById("appName").value'), 'Edited Desktop');
+    assert.equal(appChanges[0].tag, '"initial"');
+    assert.equal(appChanges[0].edit['image-path'], '');
+    await openPage('/apps');
+    await click('Edit');
+    await click('Save');
+    await hasText('Couldn’t confirm the application change');
+    assert.equal(appChanges[1].tag, '"concurrent"');
+    await click('Cancel');
+    appTag = '"changed-before-delete"';
+    await evaluate('window.confirm = () => true; document.querySelector(\'[aria-label="Delete Example Desktop"]\').click()');
+    await hasText('The application list changed');
+    assert.equal(appChanges[2].method, 'DELETE');
+    assert.equal(apps.length, 2);
+    await openPage('/apps');
+    await hasText('Example Desktop');
+    acceptAppChanges = true;
+    await evaluate('window.confirm = () => true; document.querySelector(\'[aria-label="Delete Example Desktop"]\').click()');
+    await until(() => evaluate('document.querySelector(".navbar-brand") && !document.querySelector(\'[aria-label="Delete Example Desktop"]\')'), 'reloaded list after delete');
+    assert.equal(appChanges[3].tag, '"changed-before-delete"');
+    assert.equal(apps.length, 1);
     assert.deepEqual(jsErrors, []);
     console.log('Confirmed load failure, functional settings save, edits preserved, correct request body, restart denial, lost response and acknowledgement.');
+    console.log('Confirmed cover fallback, draft preservation and application revision checks for both edits and deletion.');
   }
 } finally {
   ws?.close();

@@ -27,6 +27,8 @@
   on the page if saving fails.
 - Edits to the application list preserve the active stream. A failed write
   leaves the previous list intact, and saving no longer logs the app commands.
+- The browser checks that an application still matches the list you opened
+  before saving or deleting it. Failed saves leave your draft on the page.
 - The host version command reports the build and source commit without creating
   settings. Invalid daemon flags return an error.
 - Remove the inherited Featured Apps catalog and its external request from the

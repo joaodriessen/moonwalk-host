@@ -10,8 +10,11 @@
   <div class="container">
     <div class="my-4">
       <h1>{{ $t('apps.applications_title') }}</h1>
-      <p>{{ $t('apps.applications_desc') }}</p>
     </div>
+    <div class="alert alert-danger" v-if="appError && !showEditForm" role="alert">
+      {{ $t(appError) }}
+    </div>
+    <p v-if="!apps && !appError" role="status">{{ $t('_common.loading') }}</p>
 
     <!-- Apps Grid -->
     <div class="row g-3" v-if="apps && apps.length > 0">
@@ -19,11 +22,11 @@
         <div class="card app-card h-100">
           <div class="app-poster-container">
             <img
-              v-if="app['image-path']"
+              v-if="app['image-path'] && !failedCovers.has(i)"
               :src="'/api/covers/' + i"
               class="app-poster"
               :alt="app.name"
-              @error="handleImageError"
+              @error="failedCovers.add(i)"
             />
             <div v-else class="app-poster-placeholder">
               <span class="app-initial">{{ app.name.charAt(0).toUpperCase() }}</span>
@@ -42,11 +45,12 @@
               </div>
             </div>
             <div class="mt-auto d-flex gap-2">
-              <button class="btn btn-sm btn-primary flex-fill" @click="editApp(i)">
+              <button class="btn btn-sm btn-primary flex-fill" :disabled="appPending" @click="editApp(i)">
                 <edit :size="16" class="icon"></edit>
                 {{ $t('apps.edit') }}
               </button>
-              <button class="btn btn-sm btn-danger" @click="showDeleteForm(i)">
+              <button class="btn btn-sm btn-danger" :disabled="appPending" @click="showDeleteForm(i)"
+                :aria-label="$t('apps.delete') + ' ' + app.name">
                 <trash-2 :size="16" class="icon"></trash-2>
               </button>
             </div>
@@ -56,7 +60,7 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else class="card">
+    <div v-else-if="apps" class="card">
       <div class="card-body text-center py-5">
         <p class="text-muted">{{ $t('apps.no_applications') }}</p>
       </div>
@@ -353,20 +357,21 @@
               target="_blank">{{ $t('_common.see_more') }}</a></div>
         </div>
         <!-- Save buttons -->
+        <div class="alert alert-danger" v-if="appError" role="alert">{{ $t(appError) }}</div>
         <div class="d-flex">
-          <button @click="showEditForm = false" class="btn btn-secondary m-2">
+          <button @click="showEditForm = false; appError = null" :disabled="appPending" class="btn btn-secondary m-2">
             <x :size="18" class="icon"></x>
             {{ $t('_common.cancel') }}
           </button>
-          <button class="btn btn-primary m-2" @click="save">
+          <button class="btn btn-primary m-2" :disabled="appPending" @click="save">
             <save :size="18" class="icon"></save>
             {{ $t('_common.save') }}
           </button>
         </div>
       </div>
     </div>
-    <div class="mt-4" v-else>
-      <button class="btn btn-primary" @click="newApp">
+    <div class="mt-4" v-else-if="apps">
+      <button class="btn btn-primary" :disabled="appPending" @click="newApp">
         <layers-plus :size="18" class="icon"></layers-plus>
         {{ $t('apps.add_new') }}
       </button>
@@ -413,7 +418,11 @@
     },
     data() {
       return {
-        apps: [],
+        apps: null,
+        appRevision: null,
+        appPending: false,
+        appError: null,
+        failedCovers: new Set(),
         showEditForm: false,
         editForm: null,
         detachedCmd: "",
@@ -424,20 +433,26 @@
         platform: "",
       };
     },
-    created() {
-      fetch("./api/apps")
-        .then((r) => r.json())
-        .then((r) => {
-          console.log(r);
-          this.apps = r.apps;
-        });
-
+    async created() {
       fetch("./api/config")
         .then(r => r.json())
-        .then(r => this.platform = r.platform);
+        .then(r => this.platform = r.platform)
+        .catch(() => {});
+      try {
+        const response = await fetch("./api/apps", { signal: AbortSignal.timeout(10000) });
+        const revision = response.headers.get("ETag");
+        if (!response.ok || !revision) throw new Error("Could not load applications");
+        const { apps } = await response.json();
+        if (!Array.isArray(apps)) throw new Error("Invalid application list");
+        this.appRevision = revision;
+        this.apps = apps;
+      } catch {
+        this.appError = 'apps.load_failed';
+      }
     },
     methods: {
       newApp() {
+        this.appError = null;
         this.editForm = {
           name: "",
           output: "",
@@ -456,6 +471,7 @@
         this.showEditForm = true;
       },
       editApp(id) {
+        this.appError = null;
         this.editForm = JSON.parse(JSON.stringify(this.apps[id]));
         this.editForm.index = id;
         if (this.editForm["prep-cmd"] === undefined)
@@ -479,18 +495,8 @@
         this.showEditForm = true;
       },
       showDeleteForm(id) {
-        let resp = confirm(
-          "Are you sure to delete " + this.apps[id].name + "?"
-        );
-        if (resp) {
-          fetch("./api/apps/" + id, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json"
-            },
-          }).then((r) => {
-            if (r.status === 200) document.location.reload();
-          });
+        if (confirm(this.$t('apps.confirm_delete', { name: this.apps[id].name }))) {
+          return this.updateApps("./api/apps/" + id, "DELETE");
         }
       },
       addPrepCmd() {
@@ -606,25 +612,34 @@
           .finally(() => this.coverFinderBusy = false);
       },
       save() {
-        this.editForm["image-path"] = this.editForm["image-path"].toString().replace(/"/g, '');
-        fetch("./api/apps", {
-          method: "POST",
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(this.editForm),
-        }).then((r) => {
-          if (r.status === 200) document.location.reload();
-        });
+        const draft = { ...this.editForm };
+        draft["image-path"] = String(draft["image-path"] ?? "").replace(/"/g, '');
+        return this.updateApps("./api/apps", "POST", JSON.stringify(draft));
       },
-      handleImageError(event) {
-        // Hide the broken image and show placeholder instead
-        event.target.style.display = 'none';
-        const placeholder = event.target.nextElementSibling;
-        if (placeholder && placeholder.classList.contains('app-poster-placeholder')) {
-          placeholder.style.display = 'flex';
+      async updateApps(path, method, body) {
+        if (this.appPending || !this.appRevision) return;
+        this.appPending = true;
+        this.appError = null;
+        try {
+          const response = await fetch(path, {
+            method,
+            body,
+            headers: { "Content-Type": "application/json", "If-Match": this.appRevision },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (response.status === 412) {
+            this.appError = 'apps.list_changed';
+          } else if (response.ok && (await response.json()).status === true) {
+            document.location.reload();
+            return;
+          } else {
+            this.appError = 'apps.change_unconfirmed';
+          }
+        } catch {
+          this.appError = 'apps.change_unconfirmed';
         }
-      }
+        this.appPending = false;
+      },
     },
   });
 
