@@ -3,16 +3,17 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$DIR/../.." && pwd)"
+source "$DIR/common.sh"
 DEPLOYMENT_TARGET="14.0"
-OPENSSL_VERSION="3.6.3"
-OPENSSL_SHA256="243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1"
+OPENSSL_VERSION="3.5.9"
+OPENSSL_SHA256="603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
 OPENSSL_URL="https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz"
 OPUS_VERSION="1.6.1"
 OPUS_SHA256="6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1"
 OPUS_URL="https://ftp.osuosl.org/pub/xiph/releases/opus/opus-${OPUS_VERSION}.tar.gz"
-MINIUPNPC_VERSION="2.3.3"
-MINIUPNPC_SHA256="d52a0afa614ad6c088cc9ddff1ae7d29c8c595ac5fdd321170a05f41e634bd1a"
-MINIUPNPC_URL="https://github.com/miniupnp/miniupnp/releases/download/miniupnpc_2_3_3/miniupnpc-${MINIUPNPC_VERSION}.tar.gz"
+MINIUPNPC_VERSION="2.3.5"
+MINIUPNPC_SHA256="b9a1e57233216c5f62572de6d628e73e910f50cdb71e9c0eb89b169ce154d256"
+MINIUPNPC_URL="https://github.com/miniupnp/miniupnp/releases/download/miniupnpc_2_3_5/miniupnpc-${MINIUPNPC_VERSION}.tar.gz"
 
 JOBS="${SKYLIGHT_BUILD_JOBS:-6}"
 
@@ -26,7 +27,7 @@ print_manifest() {
 
 XCODE_VERSION="$(xcodebuild -version 2>/dev/null | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version 2>/dev/null)"
-RECIPE_SHA="$(shasum -a 256 "$0" | awk '{print $1}')"
+RECIPE_SHA="$(shasum -a 256 "$0" "$DIR/common.sh" | awk '{print $1}' | shasum -a 256 | awk '{print $1}')"
 CACHE_KEY="$(
   print_manifest
   printf 'architecture=arm64\nxcode=%s\nsdk=%s\nrecipe=%s\n' \
@@ -47,25 +48,13 @@ print_cmake_args() {
   echo "-DCMAKE_PREFIX_PATH=$PREFIX"
 }
 
-verify_file() {
-  local expected="$1"
-  local file="$2"
-  local actual
-  [ -f "$file" ] || { echo "ERROR: dependency archive is missing: $file" >&2; return 1; }
-  actual="$(shasum -a 256 "$file" | awk '{print $1}')"
-  if [ "$actual" != "$expected" ]; then
-    echo "ERROR: checksum mismatch for $file (expected $expected, got $actual)" >&2
-    return 1
-  fi
-}
-
 case "${1:-}" in
   --print-manifest) print_manifest; exit 0 ;;
   --print-root) printf '%s\n' "$ROOT"; exit 0 ;;
   --print-cmake-args) print_cmake_args; exit 0 ;;
   --verify-file)
     [ "$#" -eq 3 ] || { echo "Usage: $0 --verify-file SHA256 FILE" >&2; exit 64; }
-    verify_file "$2" "$3"
+    release_verify_archive "$2" "$3"
     exit 0
     ;;
   -h|--help)
@@ -81,19 +70,17 @@ fetch_archive() {
   local url="$2"
   local sha256="$3"
   local archive="$DOWNLOADS/$name"
-  if [ ! -f "$archive" ]; then
-    curl --fail --location --retry 3 --output "$archive" "$url"
-  fi
-  verify_file "$sha256" "$archive"
+  release_fetch_archive "$url" "$archive" "$sha256" || return 1
   printf '%s\n' "$archive"
 }
 
 extract_archive() {
   local archive="$1"
   local destination="$2"
-  if [ ! -d "$destination" ]; then
+  if [ ! -f "$destination/.archive-complete" ]; then
     mkdir -p "$destination"
     tar -xf "$archive" -C "$destination" --strip-components=1
+    touch "$destination/.archive-complete"
   fi
 }
 

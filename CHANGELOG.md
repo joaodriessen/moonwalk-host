@@ -15,6 +15,8 @@
   document where to get their exact source revisions.
 - Staple the app’s notarization ticket before packaging it and verify the app
   inside the finished DMG.
+- Use the current OpenSSL 3.5 LTS security release and MiniUPnPC 2.3.5. Retry
+  interrupted dependency downloads without accepting a partial archive.
 
 ## Earlier private alpha builds
 

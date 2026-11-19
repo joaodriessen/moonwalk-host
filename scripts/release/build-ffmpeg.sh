@@ -2,6 +2,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$REPO/scripts/release/common.sh"
 VERSION=9.0.2
 SOURCE_SHA256=8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
 COMPANION_TAG=v2026.621.21936
@@ -42,17 +43,13 @@ verify "$COMPLETION_PATCH_SHA256" "$COMPLETION_PATCH"
 verify "$LIVE_BITRATE_PATCH_SHA256" "$LIVE_BITRATE_PATCH"
 if verify_prepared; then echo "Prepared FFmpeg $VERSION: $PREFIX"; exit 0; fi
 mkdir -p "$ROOT"
-if [ ! -f "$ARCHIVE" ]; then
-  curl --fail --location --retry 3 --output "$ARCHIVE" "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz"
-fi
-verify "$SOURCE_SHA256" "$ARCHIVE"
-if [ ! -f "$COMPANIONS" ]; then
-  curl --fail --location --retry 3 --output "$COMPANIONS" "https://github.com/LizardByte/build-deps/releases/download/$COMPANION_TAG/Darwin-arm64-ffmpeg.tar.gz"
-fi
-verify "$COMPANION_SHA256" "$COMPANIONS"
-if [ ! -d "$ROOT/companion/ffmpeg" ]; then
+release_fetch_archive "https://ffmpeg.org/releases/ffmpeg-$VERSION.tar.xz" "$ARCHIVE" "$SOURCE_SHA256"
+release_fetch_archive "https://github.com/LizardByte/build-deps/releases/download/$COMPANION_TAG/Darwin-arm64-ffmpeg.tar.gz" \
+  "$COMPANIONS" "$COMPANION_SHA256"
+if [ ! -f "$ROOT/companion/.archive-complete" ]; then
   mkdir -p "$ROOT/companion"
   tar -xf "$COMPANIONS" -C "$ROOT/companion"
+  touch "$ROOT/companion/.archive-complete"
 fi
 COMPANION="$ROOT/companion/ffmpeg"
 for lib in libSvtAv1Enc.a libx264.a libx265.a; do [ -f "$COMPANION/lib/$lib" ] || { echo "ERROR: companion library missing: $lib" >&2; exit 1; }; done

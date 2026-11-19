@@ -2,6 +2,10 @@
 
 Build on an Apple Silicon Mac running macOS 14 or later. You need Xcode with its command-line tools and Homebrew. CI uses macOS 15. See [Install](INSTALL.md) for the signed tester package.
 
+Pull requests that only change the web settings build on Linux. Changes that
+affect the daemon, menu app or shared settings schema also build on macOS.
+Pushes to main and manual workflow runs exercise both.
+
 ```sh
 git clone https://github.com/joaodriessen/moonwalk-host.git
 cd moonwalk-host

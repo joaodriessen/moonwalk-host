@@ -11,6 +11,28 @@ release_die() {
   return 1
 }
 
+release_verify_archive() {
+  local expected="$1" file="$2" actual
+  [ -f "$file" ] || { release_die "dependency archive is missing: $file"; return 1; }
+  actual="$(shasum -a 256 "$file" | awk '{print $1}')" || return 1
+  if [ "$actual" != "$expected" ]; then
+    release_die "checksum mismatch for $file (expected $expected, got $actual)"
+    return 1
+  fi
+}
+
+release_fetch_archive() {
+  local url="$1" destination="$2" sha256="$3" staging
+  if release_verify_archive "$sha256" "$destination" 2>/dev/null; then return 0; fi
+  staging="$(mktemp "$destination.download.XXXXXX")" || return 1
+  if ! curl --fail --location --retry 3 --output "$staging" "$url" ||
+     ! release_verify_archive "$sha256" "$staging" ||
+     ! mv -f "$staging" "$destination"; then
+    unlink "$staging" 2>/dev/null || true
+    return 1
+  fi
+}
+
 release_app_digest() {
   local app="$1"
   [ -d "$app/Contents" ] || { release_die "invalid app for digest: $app"; return 1; }

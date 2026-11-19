@@ -12,14 +12,14 @@ manifest="$($SCRIPT --print-manifest)"
 
 for expected in \
   'deployment_target=14.0' \
-  'openssl=3.6.3 sha256=243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1' \
+  'openssl=3.5.9 sha256=603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a' \
   'opus=1.6.1 sha256=6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1' \
-  'miniupnpc=2.3.3 sha256=d52a0afa614ad6c088cc9ddff1ae7d29c8c595ac5fdd321170a05f41e634bd1a'; do
+  'miniupnpc=2.3.5 sha256=b9a1e57233216c5f62572de6d628e73e910f50cdb71e9c0eb89b169ce154d256'; do
   [[ "$manifest" == *"$expected"* ]] || fail "manifest missing: $expected"
 done
 
 printf 'not the expected archive' > "$WORK/archive"
-if "$SCRIPT" --verify-file 243a86649cf6f23eeb6a2ff2456e09e5d77dd9018a54d3d96b0c6bdd6ba6c7f1 "$WORK/archive" >"$WORK/out" 2>&1; then
+if "$SCRIPT" --verify-file 603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a "$WORK/archive" >"$WORK/out" 2>&1; then
   fail "bad dependency archive was accepted"
 fi
 grep -Fq 'checksum mismatch' "$WORK/out" || fail "checksum failure was not actionable"
@@ -40,11 +40,41 @@ esac
 
 FIXTURE="$WORK/repo/scripts/release"
 mkdir -p "$FIXTURE"
-cp "$SCRIPT" "$REPO/scripts/release/build-ffmpeg.sh" "$FIXTURE/"
+cp "$SCRIPT" "$REPO/scripts/release/build-ffmpeg.sh" "$REPO/scripts/release/common.sh" "$FIXTURE/"
 root_before="$("$FIXTURE/build-dependencies.sh" --print-root)"
 printf '\n# recipe mutation\n' >> "$FIXTURE/build-dependencies.sh"
 root_after="$("$FIXTURE/build-dependencies.sh" --print-root)"
 [ "$root_before" != "$root_after" ] || fail "dependency recipe change did not invalidate the cache"
+
+(
+  source "$REPO/scripts/release/common.sh"
+  printf 'truncated prior download' > "$WORK/cached"
+  printf 'complete dependency archive' > "$WORK/expected"
+  expected="$(shasum -a 256 "$WORK/expected" | awk '{print $1}')"
+  curl() {
+    # The last two parameters are the destination and source URL.
+    output="${@: -2:1}"
+    [ "$output" != "$WORK/cached" ] || fail "downloader writes directly into the cache"
+    case "$download" in
+      interrupted) printf 'partial bytes' > "$output"; return 18 ;;
+      invalid) printf 'wrong checksum' > "$output" ;;
+      valid) cp "$WORK/expected" "$output" ;;
+      *) fail "valid cache unexpectedly downloaded again" ;;
+    esac
+  }
+  for download in interrupted invalid; do
+    if release_fetch_archive https://example.invalid/archive "$WORK/cached" "$expected" >"$WORK/out" 2>&1; then
+      fail "accepted $download dependency bytes"
+    fi
+    [ "$(cat "$WORK/cached")" = 'truncated prior download' ] || fail "failed download changed the cache"
+    [ -z "$(find "$WORK" -name 'cached.download.*' -print -quit)" ] || fail "failed download left a staging file"
+  done
+  download=valid
+  release_fetch_archive https://example.invalid/archive "$WORK/cached" "$expected"
+  cmp "$WORK/cached" "$WORK/expected"
+  download=reuse
+  release_fetch_archive https://example.invalid/archive "$WORK/cached" "$expected"
+)
 
 DEPENDENCIES_CMAKE="$REPO/cmake/dependencies/common.cmake"
 LINKS_CMAKE="$REPO/cmake/compile_definitions/common.cmake"

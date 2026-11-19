@@ -19,7 +19,10 @@ concurrency:
 jobs:
   repository:
     name: Check privacy and documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    outputs:
+      native: ${{ steps.scope.outputs.native }}
+      web: ${{ steps.scope.outputs.web }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -27,8 +30,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Check new commits and release documentation
+        id: scope
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           test "$(git rev-list --max-parents=0 HEAD | wc -l)" -eq 1
           base=$(git rev-parse --verify --quiet --end-of-options "$BASE_REF^{commit}") || base=""
@@ -38,8 +43,45 @@ jobs:
           bash scripts/release/verify-artifact.sh --repo-only
           bash scripts/release/tests/test-repo-verifier.sh
 
+          native=true
+          web=true
+          if [ "$EVENT_NAME" = pull_request ] && [ -n "$base" ]; then
+            native=false
+            web=false
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                src_assets/common/assets/web/config_schema.json) native=true; web=true ;;
+                package.json|package-lock.json|vite.config.js|src_assets/common/assets/web/*|docs/assets/skylight-icon.png) web=true ;;
+                README.md|CHANGELOG.md|SECURITY.md|CONTRIBUTING.md|docs/*|macos-dist/README.md|patches/README.md|.github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md) ;;
+                *) native=true; web=true ;;
+              esac
+            done < <(git diff --no-renames --name-only -z "$base" HEAD)
+          fi
+          printf 'native=%s\nweb=%s\n' "$native" "$web" >> "$GITHUB_OUTPUT"
+
+  web:
+    name: Build the web settings
+    needs: repository
+    if: needs.repository.outputs.web == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify the locked build
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build-clean
+          test -s build/assets/web/index.html
+          test -s build/assets/web/config.html
+          test -s build/assets/web/pin.html
+
   daemon-build:
     name: Build and test the host daemon
+    needs: repository
+    if: needs.repository.outputs.native == 'true'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -113,6 +155,8 @@ jobs:
 
   menu-app-build:
     name: Build and test the menu app
+    needs: repository
+    if: needs.repository.outputs.native == 'true'
     runs-on: macos-15
     timeout-minutes: 20
     steps:
