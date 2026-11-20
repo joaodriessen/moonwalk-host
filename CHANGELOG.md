@@ -10,8 +10,13 @@
 - Fixed clean builds of the signed installer when the shared dependency cache is empty.
 - Keep cached native library paths valid after removing a finished build's source snapshot.
 - Updated the optional web settings dependencies and removed the unused Codecov plugin.
-- Pointed the web settings page to Moonwalk Host releases and source instead of
-  offering unrelated Sunshine updates.
+- Restored the documentation and source links on the web settings home page.
+  The source link opens the revision used to build the host.
+- Reject invalid input records before dispatching them. HTTPS checks that the
+  client presents the certificate saved when it paired.
+- Use the configured stream timeout for the ENet control connection.
+- Remove the old Sunshine Homebrew build script. The developer and installer
+  builds are documented in the [build guide](docs/BUILDING.md).
 - Removed request headers and parameters from daemon debug logging and improved
   redaction when exporting older logs. Startup also keeps configuration values
   such as display names and hook commands out of the log.
