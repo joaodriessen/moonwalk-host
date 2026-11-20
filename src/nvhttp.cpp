@@ -78,8 +78,6 @@ namespace nvhttp {
   namespace fs = std::filesystem;
   namespace pt = boost::property_tree;
 
-  crypto::cert_chain_t cert_chain;
-
   class SunshineHTTPSServer: public SimpleWeb::ServerBase<SunshineHTTPS> {
   public:
     SunshineHTTPSServer(const std::string &certification_file, const std::string &private_key_file):
@@ -446,7 +444,7 @@ namespace nvhttp {
   static std::optional<authenticated_device_t> resolve_paired_device(const X509 *certificate, const std::vector<named_cert_t> &devices);
   std::atomic<uint32_t> session_id_counter;
 
-  // Guards the paired device list and TLS certificate chain together.
+  // Guards the paired device list used for TLS authorization.
   // When locks are nested, pairing sessions come first, then this lock,
   // then the credential file mutex shared with the web settings.
   std::mutex cert_state_mutex;
@@ -606,20 +604,6 @@ namespace nvhttp {
   }
 
   // The caller holds cert_state_mutex.
-  void adopt_client_state(client_t client) {
-    cert_chain.clear();
-    for (const auto &device : client.named_devices) {
-      if (auto cert = crypto::x509(device.cert)) cert_chain.add(std::move(cert));
-    }
-    client_root = std::move(client);
-  }
-
-  // Mutates `cert_chain` and `client_root`. Must be called with `cert_state_mutex` already held
-  // by the caller -- this function does not lock it itself (see the mutex's declaration comment
-  // above). Everything before the "Empty certificate chain..." section below only touches a local
-  // ptree/client_t and does not require the lock, but callers must hold it for the whole call for
-  // simplicity and to keep exactly one invariant ("hold the lock before calling load_state()") to
-  // reason about.
   void load_state() {
     if (!fs::exists(config::nvhttp.file_state)) {
       BOOST_LOG(info) << "File "sv << config::nvhttp.file_state << " doesn't exist"sv;
@@ -675,7 +659,7 @@ namespace nvhttp {
       }
     }
 
-    adopt_client_state(std::move(client));
+    client_root = std::move(client);
   }
 
   bool add_authorized_client(const std::string &name, std::string &&cert) {
@@ -942,7 +926,7 @@ namespace nvhttp {
     tree.put("root.<xmlattr>.status_code", 200);
   }
 
-  void clientpairingsecret(pair_session_t &sess, std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, pt::ptree &tree, const std::string &client_pairing_secret) {
+  void clientpairingsecret(pair_session_t &sess, pt::ptree &tree, const std::string &client_pairing_secret) {
     if (sess.last_phase != PAIR_PHASE::SERVERCHALLENGERESP) {
       fail_pair(sess, tree, "Out of order call to clientpairingsecret");
       return;
@@ -992,7 +976,7 @@ namespace nvhttp {
 
     // if hash not correct, probably MITM
     bool same_hash = hash.size() == sess.clienthash.size() && std::equal(hash.begin(), hash.end(), sess.clienthash.begin());
-    auto verify = crypto::verify256(crypto::x509(client.cert), secret, sign);
+    auto verify = crypto::verify256(x509, secret, sign);
     if (same_hash && verify) {
       if (!add_authorized_client(client.name, std::move(client.cert))) {
         fail_pair(sess, tree, "Could not save the paired device.");
@@ -1000,7 +984,6 @@ namespace nvhttp {
         return;
       }
       tree.put("root.paired", 1);
-      add_cert->raise(std::move(x509));
 
       // Fast pairing-outcome observation: a read-only OBSERVATION of the crypto verification
       // decision made just above (`same_hash && verify`) -- does not participate in or alter that
@@ -1060,7 +1043,7 @@ namespace nvhttp {
   }
 
   template<class T>
-  void pair(std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
+  void pair(std::shared_ptr<typename SimpleWeb::ServerBase<T>::Response> response, std::shared_ptr<typename SimpleWeb::ServerBase<T>::Request> request) {
     // Serializes ALL of map_id_sess's touches across this function -- see map_id_sess_mutex's
     // declaration comment. Held for the entire function body, including the emplace(), the
     // find(), and the clientchallenge()/serverchallengeresp()/clientpairingsecret() calls below
@@ -1226,7 +1209,7 @@ namespace nvhttp {
       serverchallengeresp(sess_it->second, tree, encrypted_response);
     } else if (it = args.find("clientpairingsecret"); it != std::end(args)) {
       auto pairingsecret = util::from_hex_vec(it->second, true);
-      clientpairingsecret(sess_it->second, add_cert, tree, pairingsecret);
+      clientpairingsecret(sess_it->second, tree, pairingsecret);
     } else {
       tree.put("root.<xmlattr>.status_code", 404);
       tree.put("root.<xmlattr>.status_message", "Invalid pairing request");
@@ -2460,8 +2443,6 @@ namespace nvhttp {
     auto cert = file_handler::read_file(config::nvhttp.cert.c_str());
     setup(pkey, cert);
 
-    auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
-
     // resume doesn't always get the parameter "localAudioPlayMode"
     // launch will store it in host_audio
     bool host_audio {};
@@ -2469,8 +2450,8 @@ namespace nvhttp {
     https_server_t https_server {config::nvhttp.cert, config::nvhttp.pkey};
     http_server_t http_server;
 
-    // Verify certificates after establishing connection
-    https_server.verify = [add_cert](SSL *ssl) {
+    // Authorize the exact certificate recorded when the device paired.
+    https_server.verify = [](SSL *ssl) {
       crypto::x509_t x509 {
 #if OPENSSL_VERSION_MAJOR >= 3
         SSL_get1_peer_certificate(ssl)
@@ -2483,42 +2464,12 @@ namespace nvhttp {
         return 0;
       }
 
-      int verified = 0;
-
-      auto fg = util::fail_guard([&]() {
-        char subject_name[256];
-
-        X509_NAME_oneline(X509_get_subject_name(x509.get()), subject_name, sizeof(subject_name));
-
-        BOOST_LOG(debug) << subject_name << " -- "sv << (verified ? "verified"sv : "denied"sv);
-      });
-
-      const char *err_str;
-      {
-        // See cert_state_mutex's declaration comment. Scoped tightly around the
-        // add()+verify() sequence only; no network I/O happens under the lock.
-        std::lock_guard<std::mutex> lock(cert_state_mutex);
-
-        while (add_cert->peek()) {
-          auto cert = add_cert->pop();
-          // A device may have been unpaired before its first TLS request.
-          if (resolve_paired_device(cert.get(), client_root.named_devices)) {
-            cert_chain.add(std::move(cert));
-          }
-        }
-
-        err_str = cert_chain.verify(x509.get());
+      const bool verified = authenticated_device_for_certificate(x509.get()).has_value();
+      if (!verified) {
+        BOOST_LOG(warning) << "TLS client certificate is not paired"sv;
       }
 
-      if (err_str) {
-        BOOST_LOG(warning) << "SSL Verification error :: "sv << err_str;
-
-        return verified;
-      }
-
-      verified = 1;
-
-      return verified;
+      return verified ? 1 : 0;
     };
 
     https_server.on_verify_failed = [](resp_https_t resp, req_https_t req) {
@@ -2538,8 +2489,8 @@ namespace nvhttp {
 
     https_server.default_resource["GET"] = not_found<SunshineHTTPS>;
     https_server.resource["^/serverinfo$"]["GET"] = serverinfo<SunshineHTTPS>;
-    https_server.resource["^/pair$"]["GET"] = [&add_cert](auto resp, auto req) {
-      pair<SunshineHTTPS>(add_cert, resp, req);
+    https_server.resource["^/pair$"]["GET"] = [](auto resp, auto req) {
+      pair<SunshineHTTPS>(resp, req);
     };
     https_server.resource["^/applist$"]["GET"] = applist;
     https_server.resource["^/appasset$"]["GET"] = appasset;
@@ -2578,8 +2529,8 @@ namespace nvhttp {
 
     http_server.default_resource["GET"] = not_found<SimpleWeb::HTTP>;
     http_server.resource["^/serverinfo$"]["GET"] = serverinfo<SimpleWeb::HTTP>;
-    http_server.resource["^/pair$"]["GET"] = [&add_cert](auto resp, auto req) {
-      pair<SimpleWeb::HTTP>(add_cert, resp, req);
+    http_server.resource["^/pair$"]["GET"] = [](auto resp, auto req) {
+      pair<SimpleWeb::HTTP>(resp, req);
     };
 
     http_server.config.reuse_address = true;
@@ -2623,7 +2574,7 @@ namespace nvhttp {
   bool erase_all_clients() {
     std::lock_guard<std::mutex> lock(cert_state_mutex);
     if (!save_state({})) return false;
-    adopt_client_state({});
+    client_root = {};
     return true;
   }
 
@@ -2640,7 +2591,7 @@ namespace nvhttp {
     return std::nullopt;
   }
 
-  std::optional<authenticated_device_t> authenticated_device_for_certificate(X509 *certificate) {
+  std::optional<authenticated_device_t> authenticated_device_for_certificate(const X509 *certificate) {
     std::lock_guard<std::mutex> lock(cert_state_mutex);
     return resolve_paired_device(certificate, client_root.named_devices);
   }
@@ -2662,7 +2613,7 @@ namespace nvhttp {
     if (removed == devices.end()) return false;
     devices.erase(removed, devices.end());
     if (!save_state(next)) return false;
-    adopt_client_state(std::move(next));
+    client_root = std::move(next);
     return true;
   }
 }  // namespace nvhttp

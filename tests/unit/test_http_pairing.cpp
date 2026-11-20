@@ -133,7 +133,6 @@ TEST_P(PairingTest, Run) {
 
   // phase 4
   auto input_client_cert = input.session->client.cert;  // Will be moved
-  auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
   const bool was_fresh = config::sunshine.flags[config::flag::FRESH_STATE];
   config::sunshine.flags.set(config::flag::FRESH_STATE);
   const auto restore_fresh = util::fail_guard([&] {
@@ -145,24 +144,18 @@ TEST_P(PairingTest, Run) {
   // asserting so an early test failure cannot leak authorization into another parameter case.
   platf::macos::set_validated_menu_attached_for_tests(expected.phase_4_success);
 #endif
-  clientpairingsecret(*input.session, add_cert, tree, input.client_pairing_secret);
+  clientpairingsecret(*input.session, tree, input.client_pairing_secret);
 #ifdef __APPLE__
   platf::macos::set_validated_menu_attached_for_tests(false);
 #endif
   ASSERT_EQ(tree.get<int>("root.paired") == 1, expected.phase_4_success);
 
-  // Check that we actually added the input client certificate to `add_cert`
   if (expected.phase_4_success) {
-    ASSERT_EQ(add_cert->peek(), true);
-    auto cert = add_cert->pop();
-    char added_subject_name[256];
-    X509_NAME_oneline(X509_get_subject_name(cert.get()), added_subject_name, sizeof(added_subject_name));
-
-    auto input_cert = crypto::x509(input_client_cert);
-    char original_suject_name[256];
-    X509_NAME_oneline(X509_get_subject_name(input_cert.get()), original_suject_name, sizeof(original_suject_name));
-
-    ASSERT_EQ(std::string(added_subject_name), std::string(original_suject_name));
+    const auto certificate = crypto::x509(input_client_cert);
+    const auto device = authenticated_device_for_certificate(certificate.get());
+    ASSERT_TRUE(device);
+    EXPECT_TRUE(unpair_client(device->uuid));
+    EXPECT_FALSE(authenticated_device_for_certificate(certificate.get()));
   }
 }
 
@@ -191,6 +184,10 @@ TEST(PairingPersistenceTest, FailedWritesLeaveAuthorizationAndSharedStateIntact)
   const auto paired = get_all_clients();
   ASSERT_EQ(paired.back().at("name"), "Example Client");
   paired_uuid = paired.back().at("uuid").get<std::string>();
+  const auto certificate = crypto::x509(PUBLIC_CERT);
+  const auto device = authenticated_device_for_certificate(certificate.get());
+  ASSERT_TRUE(device);
+  EXPECT_EQ(device->uuid, paired_uuid);
   const auto persisted = file_handler::read_file(state.c_str());
   EXPECT_EQ(nlohmann::json::parse(persisted).at("username"), "Example Admin");
 
@@ -203,6 +200,7 @@ TEST(PairingPersistenceTest, FailedWritesLeaveAuthorizationAndSharedStateIntact)
 
   config::nvhttp.file_state = state;
   EXPECT_TRUE(unpair_client(paired_uuid));
+  EXPECT_FALSE(authenticated_device_for_certificate(certificate.get()));
   EXPECT_EQ(get_all_clients(), previous);
   EXPECT_EQ(nlohmann::json::parse(file_handler::read_file(state.c_str())).at("username"), "Example Admin");
 }
@@ -333,8 +331,7 @@ TEST(PairingTest, OutOfOrderCalls) {
   serverchallengeresp(sess, tree, "test");
   ASSERT_FALSE(tree.get<int>("root.paired") == 1);
 
-  auto add_cert = std::make_shared<safe::queue_t<crypto::x509_t>>(30);
-  clientpairingsecret(sess, add_cert, tree, "test");
+  clientpairingsecret(sess, tree, "test");
   ASSERT_FALSE(tree.get<int>("root.paired") == 1);
 
   // This should work, it's the first time we call it

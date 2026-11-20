@@ -28,8 +28,6 @@ namespace crypto {
 
   using aes_t = std::vector<std::uint8_t>;
   using x509_t = util::safe_ptr<X509, X509_free>;
-  using x509_store_t = util::safe_ptr<X509_STORE, X509_STORE_free>;
-  using x509_store_ctx_t = util::safe_ptr<X509_STORE_CTX, X509_STORE_CTX_free>;
   using cipher_ctx_t = util::safe_ptr<EVP_CIPHER_CTX, EVP_CIPHER_CTX_free>;
   using md_ctx_t = util::safe_ptr<EVP_MD_CTX, md_ctx_destroy>;
   using bio_t = util::safe_ptr<BIO, BIO_free_all>;
@@ -59,25 +57,6 @@ namespace crypto {
 
   std::string rand(std::size_t bytes);
   std::string rand_alphabet(std::size_t bytes, const std::string_view &alphabet = std::string_view {"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!%&()=-"});
-
-  // NOT internally thread-safe: callers (see nvhttp.cpp's `cert_state_mutex`) are responsible
-  // for serializing all access to a given instance across threads. add()/clear()/verify() all
-  // touch the shared `_certs` vector; verify() additionally allocates its own X509_STORE_CTX
-  // per call (rather than reusing one shared context) so concurrent-but-still-caller-serialized
-  // verify() calls never alias OpenSSL's mutable verification state.
-  class cert_chain_t {
-  public:
-    KITTY_DECL_CONSTR(cert_chain_t)
-
-    void add(x509_t &&cert);
-
-    void clear();
-
-    const char *verify(x509_t::element_type *cert);
-
-  private:
-    std::vector<std::pair<x509_t, x509_store_t>> _certs;
-  };
 
   namespace cipher {
     constexpr std::size_t tag_size = 16;

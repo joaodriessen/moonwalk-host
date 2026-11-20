@@ -67,7 +67,7 @@ namespace nvhttp {
   };
   // Match the actual transport peer certificate against the currently paired devices.
   // The claimed GameStream uniqueid is intentionally not an input.
-  std::optional<authenticated_device_t> authenticated_device_for_certificate(X509 *certificate);
+  std::optional<authenticated_device_t> authenticated_device_for_certificate(const X509 *certificate);
 #ifdef SUNSHINE_TESTS
   std::optional<authenticated_device_t> resolve_device_fixture_for_tests(const std::string &peer, const std::string &paired);
 #endif
@@ -216,7 +216,7 @@ namespace nvhttp {
    * Then using the client certificate public key we should be able to verify that
    * the client secret has been signed by Moonlight
    */
-  void clientpairingsecret(pair_session_t &sess, std::shared_ptr<safe::queue_t<crypto::x509_t>> &add_cert, boost::property_tree::ptree &tree, const std::string &client_pairing_secret);
+  void clientpairingsecret(pair_session_t &sess, boost::property_tree::ptree &tree, const std::string &client_pairing_secret);
 
   /**
    * @brief Arm the owner-initiated pairing eligibility window (S3 pairing-DoS/hijack fix).
