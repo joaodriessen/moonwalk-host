@@ -9,9 +9,10 @@ local network.
 
 ## 1. Copy it to Applications
 
-If you've been invited, download `Moonwalk-Host-…-macOS-arm64.dmg` from [Releases](https://github.com/joaodriessen/moonwalk-host/releases). Open it and drag Moonwalk Host to **Applications**, then open the copy in Applications.
-
-Use a signed and notarized DMG supplied by the project. If macOS refuses to open it, share the exact message with the maintainer.
+Open the `Moonwalk-Host-…-macOS-arm64.dmg` supplied with your invitation.
+Drag Moonwalk Host to **Applications**, then open the copy there. Distributed
+releases use signed, notarized installers. If macOS refuses to open the app,
+share the message with the maintainer.
 
 Moonwalk Host checks where it's running from. If it isn't in Applications, it asks you to move it first.
 
