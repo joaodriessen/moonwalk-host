@@ -12,7 +12,9 @@ extern "C" {
 #include <bitset>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <list>
+#include <span>
 #include <thread>
 #include <unordered_map>
 
@@ -1657,31 +1659,71 @@ namespace input {
     }
   }
 
+  template<typename Packet>
+  static bool validate_fixed_input_packet(std::span<const std::uint8_t> packet, std::uint32_t declared_size) {
+    if (constexpr auto expected_size = static_cast<std::uint32_t>(sizeof(Packet) - sizeof(std::uint32_t)); declared_size != expected_size) {
+      return false;
+    }
+    return packet.size() >= sizeof(Packet);
+  }
+
+  // Validate the common header and all fields the queue can read or batch.
+  static bool validate_input_packet(std::span<const std::uint8_t> packet) {
+    if (packet.size() < sizeof(NV_INPUT_HEADER)) {
+      return false;
+    }
+
+    NV_INPUT_HEADER header {};
+    std::memcpy(&header, packet.data(), sizeof(header));
+
+    const auto declared_size = util::endian::big(header.size);
+    if (declared_size < sizeof(header.magic) || declared_size > packet.size() - sizeof(header.size)) {
+      return false;
+    }
+
+    switch (util::endian::little(header.magic)) {
+      case MOUSE_MOVE_REL_MAGIC_GEN5:
+        return validate_fixed_input_packet<NV_REL_MOUSE_MOVE_PACKET>(packet, declared_size);
+      case MOUSE_MOVE_ABS_MAGIC:
+        return validate_fixed_input_packet<NV_ABS_MOUSE_MOVE_PACKET>(packet, declared_size);
+      case MOUSE_BUTTON_DOWN_EVENT_MAGIC_GEN5:
+      case MOUSE_BUTTON_UP_EVENT_MAGIC_GEN5:
+        return validate_fixed_input_packet<NV_MOUSE_BUTTON_PACKET>(packet, declared_size);
+      case SCROLL_MAGIC_GEN5:
+        return validate_fixed_input_packet<NV_SCROLL_PACKET>(packet, declared_size);
+      case SS_HSCROLL_MAGIC:
+        return validate_fixed_input_packet<SS_HSCROLL_PACKET>(packet, declared_size);
+      case KEY_DOWN_EVENT_MAGIC:
+      case KEY_UP_EVENT_MAGIC:
+        return validate_fixed_input_packet<NV_KEYBOARD_PACKET>(packet, declared_size);
+      case UTF8_TEXT_EVENT_MAGIC:
+        return declared_size - sizeof(header.magic) <= UTF8_TEXT_EVENT_MAX_COUNT;
+      case MULTI_CONTROLLER_MAGIC_GEN5:
+        return validate_fixed_input_packet<NV_MULTI_CONTROLLER_PACKET>(packet, declared_size);
+      case SS_TOUCH_MAGIC:
+        return validate_fixed_input_packet<SS_TOUCH_PACKET>(packet, declared_size);
+      case SS_PEN_MAGIC:
+        return validate_fixed_input_packet<SS_PEN_PACKET>(packet, declared_size);
+      case SS_CONTROLLER_ARRIVAL_MAGIC:
+        return validate_fixed_input_packet<SS_CONTROLLER_ARRIVAL_PACKET>(packet, declared_size);
+      case SS_CONTROLLER_TOUCH_MAGIC:
+        return validate_fixed_input_packet<SS_CONTROLLER_TOUCH_PACKET>(packet, declared_size);
+      case SS_CONTROLLER_MOTION_MAGIC:
+        return validate_fixed_input_packet<SS_CONTROLLER_MOTION_PACKET>(packet, declared_size);
+      case SS_CONTROLLER_BATTERY_MAGIC:
+        return validate_fixed_input_packet<SS_CONTROLLER_BATTERY_PACKET>(packet, declared_size);
+      default:
+        return true;
+    }
+  }
+
   /**
    * @brief Called on the control stream thread to queue an input message.
    * @param input The input context pointer.
    * @param input_data The input message.
    */
   void passthrough(std::shared_ptr<input_t> &input, std::vector<std::uint8_t> &&input_data) {
-    // Reject packets that are too small to even contain a header, and packets whose
-    // client-declared size (header.size, big-endian, excludes the size field itself
-    // but includes the magic field + payload) claims more bytes than were actually
-    // received. Without this, a truncated/lying packet can cause an OOB read or a
-    // null/garbage deref in print() or a type-specific handler below.
-    if (input_data.size() < sizeof(NV_INPUT_HEADER)) {
-      return;
-    }
-    auto hdr = (PNV_INPUT_HEADER) input_data.data();
-    if (sizeof(std::uint32_t) + (size_t) util::endian::big(hdr->size) > input_data.size()) {
-      return;
-    }
-    // header.size must be at least large enough to cover the magic field itself
-    // (size excludes the size field but includes magic + payload). Packet types
-    // that derive a payload length via `size - sizeof(magic)` (e.g. print() for
-    // PNV_UNICODE_PACKET) would otherwise underflow on a size < 4 and construct
-    // a std::string with a near-SIZE_MAX length, throwing std::length_error with
-    // no catch on the task-pool thread -> std::terminate -> whole-host crash.
-    if (util::endian::big(hdr->size) < sizeof(hdr->magic)) {
+    if (!validate_input_packet(input_data)) {
       return;
     }
 

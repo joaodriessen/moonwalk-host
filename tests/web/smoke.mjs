@@ -11,10 +11,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 const assets = resolve(process.argv[2] || 'build/assets/web');
 const mountOnly = process.argv.includes('--mount-only');
 const pages = ['/', '/config', '/troubleshooting', '/apps', '/pin', '/password', '/welcome'];
+const sourceRevision = process.env.MOONWALK_TEST_SOURCE_REVISION ?? 'a'.repeat(40);
+assert.match(sourceRevision, /^[a-f0-9]{40}$/);
 const profile = await mkdtemp(join(tmpdir(), 'moonwalk-browser-'));
 const settings = {
   status: true, platform: 'macos', version: 'engine', host_version: 'host',
-  source_revision: 'synthetic-source', sunshine_name: 'Example Mac', extra_setting: 'retained',
+  source_revision: sourceRevision, sunshine_name: 'Example Mac', extra_setting: 'retained',
 };
 let loadStatus = 200;
 let localeStatus = 200;
@@ -204,6 +206,16 @@ try {
   assert.deepEqual(jsErrors, []);
   if (!mountOnly) {
     await openPage('/');
+    const sourceLink = `Array.from(document.links).find(
+      link => link.textContent.trim() === 'Source code and licenses')?.href`;
+    const sourceRepository = 'https://github.com/joaodriessen/moonwalk-host';
+    await until(async () => await evaluate(sourceLink) === sourceRepository + '/tree/' + sourceRevision,
+                'source link for the packaged revision');
+    settings.source_revision = 'unknown';
+    await openPage('/');
+    await until(async () => await evaluate(sourceLink) === sourceRepository, 'source link without a revision');
+    settings.source_revision = sourceRevision;
+    console.log('Confirmed the exact source link and the repository fallback.');
     assert.equal(await evaluate("document.querySelector('[data-bs-theme-value].active')?.dataset.bsThemeValue"), 'auto');
     assert.equal(await evaluate("document.querySelector('#bd-theme').tabIndex"), 0);
     await evaluate("document.querySelector('[data-bs-theme-value=dark]').click()");

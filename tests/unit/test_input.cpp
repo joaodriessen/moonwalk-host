@@ -1,51 +1,10 @@
 /**
  * @file tests/unit/test_input.cpp
- * @brief Test src/input.cpp -- regression coverage for the hardening shipped in commit 4bb9c90e
- * ("harden input-decode path: 3 deterministic crash fixes + gamepad UAF + mDNS reliability").
+ * @brief Input queue and pointer bounds tests.
  *
- * What's covered here, and why it's a genuine (non-reimplemented) test of the shipped code:
- *
- *   - The choke-point guard at the top of the real, production
- *     `input::passthrough(std::shared_ptr<input_t> &, std::vector<std::uint8_t> &&)`
- *     (src/input.cpp:1649-1660) is exercised by calling that exact function -- not a
- *     reimplementation of its condition. For the reject cases, `input` is passed as a default
- *     (null) `std::shared_ptr<input::input_t>`: `input_t` is only forward-declared in input.h
- *     (an intentionally opaque type -- its definition lives solely inside input.cpp), so this test
- *     cannot construct or dereference one directly. That is exactly what makes these reject-path
- *     calls a valid, crash-safe test of the guard: every reject branch in `passthrough()` returns
- *     *before* the first dereference of `input`, so a null `input` proves the guard fired (if it
- *     didn't, the subsequent `input->...` dereference on a null shared_ptr would abort/segfault the
- *     test binary, which is itself a loud regression signal).
- *   - For the accept path, we need a live, non-null `input_t` so the post-guard code (which
- *     unconditionally touches `input->...`) doesn't dereference null. Rather than faking one, this
- *     test uses the real production factory `input::alloc()` (src/input.cpp:1758, the same function
- *     stream.cpp:2072 calls for a genuine client session) together with a real `safe::mail_raw_t`.
- *     On macOS, `platf::allocate_client_input_context()` is a documented no-op ("Unused" --
- *     src/platform/macos/input.mm:754) and the one delayed task `alloc()` schedules
- *     (`platf::move_mouse` after 100ms) is queued on the global `task_pool`, which is never
- *     `start()`-ed in this test binary, so it's never executed and never touches real input
- *     hardware.
- *   - To observe "the guard let this packet through" without executing any dispatched work (which
- *     -- for gamepad packets -- could reach real `platf::alloc_gamepad`/`platf::gamepad_update` HID
- *     calls), the accept tests inspect the global `task_pool` (src/globals.cpp:9) directly: a packet
- *     that clears the guard always ends in either the direct HID fast-path call (only reachable for
- *     an *already-allocated* gamepad slot, which these tests never allocate) or
- *     `task_pool.push(passthrough_next_message, input)` (src/input.cpp:1701-1703). The tests assert
- *     a task was enqueued, then `pop()` it (without `.run()`/`.get()`) so it never actually executes
- *     the dispatch, and the global task pool is left clean for other tests in this binary.
- *
- * Documented gap (honest, not faked): the gamepad_lock mutex itself (src/input.cpp:184,
- * guarding gamepads[*].id + the platf:: HID gamepad slot against the passthrough() fast-path /
- * task_pool alloc-free race) is NOT exercised here. `input_t::gamepad_lock` is a member of the
- * opaque `input_t` type -- there is no header-exposed accessor, so a test can only reach it by
- * driving the real alloc/free code paths (`passthrough(shared_ptr<input_t>&, PSS_CONTROLLER_ARRIVAL_PACKET)`
- * at src/input.cpp:881, or the `PNV_MULTI_CONTROLLER_PACKET` overload at src/input.cpp:1131), and
- * both of those, on an unallocated slot, call through to real `platf::alloc_gamepad()`
- * (src/platform/macos/input.mm) -- i.e. real IOKit/HID device creation with host side effects, not
- * something a unit test should trigger. Proving the *race* itself is actually fixed is what the
- * judge's static-analysis review already did; a unit test that stubbed out the HID layer to make
- * this "safe" would just be reimplementing the fix's precondition and would prove nothing about the
- * shipped mutex. This is intentionally left as an integration/manual-QA gap rather than faked.
+ * Rejected packets must return before accessing the input context. Accepted
+ * packets use a real context and leave their tasks unexecuted, so the tests
+ * never deliver input on the device.
  */
 #include "../tests_common.h"
 
@@ -206,6 +165,22 @@ TEST(InputPassthroughGuardTest, ExactSizeUnicodePacketIsAccepted) {
 
 // ---------------------------------------------------------------------
 // abs-mouse packet: negative width/height must be rejected, not just zero (src/input.cpp:558-566).
+TEST(InputPassthroughGuardTest, ShortUnicodePacketIsAccepted) {
+  auto input = make_real_input();
+  ASSERT_TRUE(input);
+
+  NV_UNICODE_PACKET packet {};
+  std::memcpy(packet.text, "hi", 2);
+  auto data = to_wire(packet, UTF8_TEXT_EVENT_MAGIC);
+  data.resize(sizeof(NV_INPUT_HEADER) + 2);
+  packet.header.size = util::endian::big(static_cast<uint32_t>(sizeof(packet.header.magic) + 2));
+  std::memcpy(data.data(), &packet.header, sizeof(packet.header));
+
+  input::passthrough(input, std::move(data));
+
+  EXPECT_TRUE(task_pool.pop().has_value());
+}
+
 // This overload is not declared in input.h, but has external linkage in `namespace input` (not
 // static, not anonymous namespace), so it can be forward-declared and linked against here exactly
 // like confighttp.cpp's extract_authority()/is_same_origin_impl() pattern
