@@ -12,8 +12,8 @@ pairing, permissions, and display settings from the logged-in user session.
 ## Installation
 
 Moonwalk Host is in alpha. It requires Apple Silicon and macOS 14 or later.
-Use the DMG supplied with your invitation. Releases use a signed and
-notarized DMG. Install the app in **Applications** and grant
+Download the signed and notarized DMG from [GitHub Releases](https://github.com/joaodriessen/moonwalk-host/releases).
+Install the app in **Applications** and grant
 **Screen Recording** and **Accessibility** during setup.
 
 To pair on the local network, start pairing from the client. On the Mac,
