@@ -10,7 +10,7 @@
   "type": "module",
   "dependencies": {
     "@lizardbyte/shared-web": "2026.1107.31840",
-    "@lucide/vue": "1.76.0",
+    "@lucide/vue": "1.77.0",
     "vue": "3.5.45",
     "vue-i18n": "11.4.23"
   },
